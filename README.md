@@ -109,3 +109,11 @@ node tests/sim.js
 从 `hezh202-hue/dungeon-rpg` 的 `claude/airplane-chef-game-project-lm3ggm` 分支拆分，源提交 `875f3d5`，保留 sky-chef 子目录的 Git 历史。原仓库保留迁移前副本。
 
 Android 外壳按 [Android 官方本地内容加载方案](https://developer.android.com/develop/ui/views/layout/webapps/load-local-content) 编写，使用 AndroidX WebKit 的 WebViewAssetLoader；只允许读取包内资源，不开放本地文件访问或 JavaScript 原生桥。Gradle 启动器来自 Gradle 官方 8.11.1 标签，构建发行包固定 SHA-256 校验值。
+
+下载 Actions 产物后，也可以仅用 Android SDK Build-Tools 在 Windows 本机签名：
+
+```powershell
+.\scripts\Sign-Apk.ps1 -UnsignedApk .\sky-chef-1.0.0-unsigned.apk -OutputApk .\sky-chef-1.0.0.apk -BuildTools 'C:\Android\Sdk\build-tools\35.0.0' -Keystore 'D:\private\sky-chef.jks' -PasswordFile 'D:\private\password.txt'
+```
+
+脚本先检查 APK 对齐，再签名并验证证书，最后打印 SHA-256。密码通过文件读取，不放在命令参数或日志中。签名后再上传 APK 到 Releases；不要上传密钥或密码文件。
