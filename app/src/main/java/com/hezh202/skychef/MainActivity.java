@@ -6,7 +6,7 @@ import android.app.AlertDialog;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.View;
+import android.widget.FrameLayout;
 import android.view.WindowInsets;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -26,9 +26,13 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(29, 43, 83));
-        setContentView(webView);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(Color.rgb(29, 43, 83));
+        frame.addView(webView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(frame);
         // Android 15 强制 edge-to-edge，保留系统栏及刘海的可触摸安全区域。
-        webView.setOnApplyWindowInsetsListener((view, insets) -> {
+        frame.setOnApplyWindowInsetsListener((view, insets) -> {
             if (android.os.Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets safe = insets.getInsets(
                     WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());

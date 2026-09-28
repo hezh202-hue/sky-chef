@@ -35,7 +35,24 @@ public class GameSmokeTest {
         }
         fail("Condition failed: " + expression);
     }
-    private void screenshot(String name) throws Exception {
+    private void screenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {
+        CountDownLatch draw = new CountDownLatch(1);
+        scenario.onActivity(activity -> activity.getGameWebView().postVisualStateCallback(1, new WebView.VisualStateCallback() {
+            @Override public void onComplete(long id) { draw.countDown(); }
+        }));
+        assertTrue("WebView draw timed out", draw.await(15, TimeUnit.SECONDS));
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        SystemClock.sleep(700);
+        scenario.onActivity(activity -> {
+            WebView web = activity.getGameWebView();
+            int[] location = new int[2];
+            web.getLocationOnScreen(location);
+            android.graphics.Insets bars = web.getRootWindowInsets().getInsets(
+                android.view.WindowInsets.Type.systemBars());
+            assertTrue("Content overlaps status bar", location[1] >= bars.top);
+            assertTrue("Content overlaps navigation bar", location[1] + web.getHeight() <=
+                activity.getWindowManager().getCurrentWindowMetrics().getBounds().height() - bars.bottom);
+        });
         File dir = new File(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir"));
         assertTrue(dir.isDirectory() || dir.mkdirs());
         Bitmap bitmap = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
@@ -50,7 +67,7 @@ public class GameSmokeTest {
             waitFor(scenario, "!!document.querySelector('.menu-btn.primary')");
             assertEquals("\"https://appassets.androidplatform.net\"", js(scenario, "location.origin"));
             assertEquals("false", js(scenario, "document.documentElement.scrollWidth > innerWidth + 1"));
-            screenshot("01-title.png");
+            screenshot(scenario, "01-title.png");
             js(scenario, "document.querySelector('.menu-btn.primary').click()");
             waitFor(scenario, "!!document.querySelector('.level-node')");
             js(scenario, "document.querySelector('.level-node').click()");
@@ -58,7 +75,7 @@ public class GameSmokeTest {
             js(scenario, "document.querySelector('.modal-buttons .primary').click()");
             waitFor(scenario, "!!document.querySelector('.game') && !!SC._view");
             waitFor(scenario, "SC._view.flight.time > 0");
-            screenshot("02-flight.png");
+            screenshot(scenario, "02-flight.png");
             scenario.onActivity(MainActivity::onBackPressed);
             waitFor(scenario, "SC._view.flight.paused && SC.UI.hasModal()");
             js(scenario, "Array.from(document.querySelectorAll('.modal-buttons button')).find(b => b.textContent === '继续').click()");

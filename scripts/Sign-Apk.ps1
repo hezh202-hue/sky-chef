@@ -16,7 +16,7 @@ $signerJar = Join-Path $toolsPath 'lib/apksigner.jar'
 $zipalignExe = Join-Path $toolsPath 'zipalign.exe'
 & $zipalignExe -c -P 16 4 $unsignedPath
 if ($LASTEXITCODE -ne 0) { throw 'APK 对齐校验失败，不继续签名。' }
-& java -jar $signerJar sign --ks $keyPath --ks-key-alias sky-chef --ks-pass "file:$passwordPath" --key-pass "file:$passwordPath" --out $outputPath $unsignedPath
+& java -jar $signerJar sign --ks $keyPath --ks-key-alias sky-chef --ks-pass "file:$passwordPath" --out $outputPath $unsignedPath
 if ($LASTEXITCODE -ne 0) { throw 'APK 签名失败。' }
 & java -jar $signerJar verify --verbose --print-certs $outputPath
 if ($LASTEXITCODE -ne 0) { throw 'APK 签名验证失败。' }
