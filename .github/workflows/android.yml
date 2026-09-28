@@ -45,7 +45,6 @@ jobs:
             adb shell svc wifi disable
             adb shell svc data disable
             ./gradlew --no-daemon :app:connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/com.hezh202.skychef/files/. screenshots/
       - name: 校验 APK 内容
         if: github.event_name != 'pull_request'
         run: |
@@ -65,4 +64,4 @@ jobs:
           name: android-test-reports
           path: |
             app/build/reports/
-            screenshots/
+            app/build/outputs/connected_android_test_additional_output/

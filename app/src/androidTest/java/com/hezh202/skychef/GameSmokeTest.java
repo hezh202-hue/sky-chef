@@ -36,7 +36,8 @@ public class GameSmokeTest {
         fail("Condition failed: " + expression);
     }
     private void screenshot(String name) throws Exception {
-        File dir = InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
+        File dir = new File(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir"));
+        assertTrue(dir.isDirectory() || dir.mkdirs());
         Bitmap bitmap = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(bitmap);
         try (FileOutputStream stream = new FileOutputStream(new File(dir, name))) {
