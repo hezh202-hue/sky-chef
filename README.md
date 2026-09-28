@@ -15,7 +15,7 @@
 
 ## 🚀 怎么运行
 
-直接用浏览器打开 `sky-chef/index.html` 即可（电脑、手机都支持）。
+直接用浏览器打开 `index.html` 即可（电脑、手机都支持）。
 
 也可以起一个本地服务器：
 
@@ -25,7 +25,7 @@ python3 -m http.server 8000
 # 打开 http://localhost:8000
 ```
 
-> 想在线玩：在 GitHub 仓库 Settings → Pages 中把分支设为发布源，访问 `/sky-chef/` 即可。
+> 想在线玩：在 GitHub 仓库 Settings → Pages 中把分支设为发布源，访问仓库对应的 Pages 地址即可。
 
 ## 🎮 玩法
 
@@ -50,7 +50,7 @@ python3 -m http.server 8000
 ## 🧪 测试
 
 ```bash
-node sky-chef/tests/sim.js
+node tests/sim.js
 ```
 
 - 引擎单元测试：菜谱匹配、烹饪/烤焦、完整上菜流程、颠簸禁送、口碑失败、狂热、航线地图连通性。
@@ -75,3 +75,37 @@ sky-chef/
   js/main.js         启动
   tests/sim.js       无头测试 + 平衡性模拟
 ```
+
+## Android 安装包
+
+独立仓库： https://github.com/hezh202-hue/sky-chef
+
+在 Releases 下载 `sky-chef-1.0.0.apk`，传到 Android 手机后点击安装，按系统提示允许当前浏览器或文件管理器安装应用。
+
+- 应用名：云端大厨；包名：`com.hezh202.skychef`；版本：1.0.0。
+- 最低 Android 6.0；目标 Android 15；使用系统 Android System WebView。
+- 游戏资源内置，无网络权限，无广告、账号或服务器。字体使用系统回退字体。
+- 已完成关卡的星级、金币、升级保存在本机。切后台会暂停；航班中按返回键暂停，主菜单按返回键确认退出。
+- 网页版与 APK 存档各自独立；卸载或清除应用数据会删除本机存档。未完成航班不支持杀进程续玩。
+
+### 重新打包
+
+安装 JDK 17 和 Android SDK 35，将 `ANDROID_HOME` 指向 SDK，然后运行：
+
+```powershell
+node tests/sim.js
+.\gradlew.bat :app:assembleDebug
+# 测试包：app/build/outputs/apk/debug/app-debug.apk
+```
+
+提交到 main 后 GitHub Actions 会自动执行引擎测试、Android 静态检查、Android 15 模拟器离线测试，并生成未签名 APK（不能直接安装，需在本机签名）。可在 Actions 的 `sky-chef-apk` 附件下载。
+
+签名私钥仅保存在本机，不提交仓库、不上传 GitHub Secrets。在本机构建发布版时，把 `SKY_CHEF_KEYSTORE` 设为密钥文件绝对路径、`SKY_CHEF_STORE_PASSWORD` 设为密码，再执行 `:app:assembleRelease`。以后升级必须沿用同一签名并递增 `app/build.gradle` 中的版本号。
+
+若构建失败，先看 Actions 的首个失败步骤；`android-test-reports` 保存 Android 测试和静态检查报告。若手机提示包冲突，检查是否装了同包名但不同签名的 debug 版，勿直接卸载含有重要存档的版本。
+
+### 来源与实现
+
+从 `hezh202-hue/dungeon-rpg` 的 `claude/airplane-chef-game-project-lm3ggm` 分支拆分，源提交 `875f3d5`，保留 sky-chef 子目录的 Git 历史。原仓库保留迁移前副本。
+
+Android 外壳按 [Android 官方本地内容加载方案](https://developer.android.com/develop/ui/views/layout/webapps/load-local-content) 编写，使用 AndroidX WebKit 的 WebViewAssetLoader；只允许读取包内资源，不开放本地文件访问或 JavaScript 原生桥。Gradle 启动器来自 Gradle 官方 8.11.1 标签，构建发行包固定 SHA-256 校验值。

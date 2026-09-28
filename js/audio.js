@@ -184,6 +184,15 @@
       if (musicTimer) clearInterval(musicTimer);
       musicTimer = null;
     },
+    suspend() {
+      this.stopMusic();
+      if (ctx && ctx.state === 'running') ctx.suspend();
+    },
+    resume() {
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      if (this.musicOn) this.startMusic();
+    },
     setTempo(t) {
       tempo = t;
     },

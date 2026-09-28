@@ -1,0 +1,68 @@
+name: Android APK 与游戏测试
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 游戏引擎测试与关卡模拟
+        run: node tests/sim.js
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 构建 APK 并运行 Android 静态检查
+        if: github.event_name != 'pull_request'
+        run: ./gradlew --no-daemon :app:assembleRelease :app:lintRelease
+      - name: 拉取请求编译校验
+        if: github.event_name == 'pull_request'
+        run: ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
+      - name: 启用 Android 模拟器硬件加速
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 15 离线启动、进关、暂停与存档测试
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb shell svc wifi disable
+            adb shell svc data disable
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/com.hezh202.skychef/files/. screenshots/
+      - name: 校验 APK 内容
+        if: github.event_name != 'pull_request'
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release-unsigned.apk
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/sky-chef-1.0.0-unsigned.apk
+          sha256sum dist/sky-chef-1.0.0-unsigned.apk > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: sky-chef-apk
+          path: dist/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            app/build/reports/
+            screenshots/

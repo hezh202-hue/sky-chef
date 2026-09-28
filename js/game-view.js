@@ -639,6 +639,7 @@
     return {
       node,
       flight: f,
+      pause,
       start() {
         SC.UI.setTheme(cfg.theme);
         document.addEventListener('keydown', onKey);

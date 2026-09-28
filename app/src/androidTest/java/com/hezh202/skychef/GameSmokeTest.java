@@ -1,0 +1,76 @@
+package com.hezh202.skychef;
+
+import android.graphics.Bitmap;
+import android.os.SystemClock;
+import android.webkit.WebView;
+import androidx.lifecycle.Lifecycle;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import static org.junit.Assert.*;
+
+@RunWith(AndroidJUnit4.class)
+public class GameSmokeTest {
+    private String js(ActivityScenario<MainActivity> scenario, String script) throws Exception {
+        AtomicReference<String> result = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        scenario.onActivity(activity -> activity.getGameWebView().evaluateJavascript(script, value -> {
+            result.set(value); latch.countDown();
+        }));
+        assertTrue("JavaScript callback timed out", latch.await(15, TimeUnit.SECONDS));
+        return result.get();
+    }
+    private void waitFor(ActivityScenario<MainActivity> scenario, String expression) throws Exception {
+        long deadline = SystemClock.uptimeMillis() + 20000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            if ("true".equals(js(scenario, expression))) return;
+            SystemClock.sleep(150);
+        }
+        fail("Condition failed: " + expression);
+    }
+    private void screenshot(String name) throws Exception {
+        File dir = InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
+        Bitmap bitmap = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+        assertNotNull(bitmap);
+        try (FileOutputStream stream = new FileOutputStream(new File(dir, name))) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        }
+        bitmap.recycle();
+    }
+    @Test public void offlineGameLifecycleAndSave() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            waitFor(scenario, "!!document.querySelector('.menu-btn.primary')");
+            assertEquals("\"https://appassets.androidplatform.net\"", js(scenario, "location.origin"));
+            assertEquals("false", js(scenario, "document.documentElement.scrollWidth > innerWidth + 1"));
+            screenshot("01-title.png");
+            js(scenario, "document.querySelector('.menu-btn.primary').click()");
+            waitFor(scenario, "!!document.querySelector('.level-node')");
+            js(scenario, "document.querySelector('.level-node').click()");
+            waitFor(scenario, "!!document.querySelector('.modal-buttons .primary')");
+            js(scenario, "document.querySelector('.modal-buttons .primary').click()");
+            waitFor(scenario, "!!document.querySelector('.game') && !!SC._view");
+            waitFor(scenario, "SC._view.flight.time > 0");
+            screenshot("02-flight.png");
+            scenario.onActivity(MainActivity::onBackPressed);
+            waitFor(scenario, "SC._view.flight.paused && SC.UI.hasModal()");
+            js(scenario, "Array.from(document.querySelectorAll('.modal-buttons button')).find(b => b.textContent === '继续').click()");
+            waitFor(scenario, "!SC._view.flight.paused && !SC.UI.hasModal()");
+            scenario.moveToState(Lifecycle.State.CREATED);
+            scenario.moveToState(Lifecycle.State.RESUMED);
+            waitFor(scenario, "SC._view.flight.paused");
+            assertEquals("false", js(scenario, "document.documentElement.scrollWidth > innerWidth + 1"));
+            js(scenario, "SC.Save.data.coins = 321; SC.Save.save()");
+            scenario.recreate();
+            waitFor(scenario, "!!document.querySelector('.title-screen')");
+            assertEquals("321", js(scenario, "SC.Save.data.coins"));
+            assertEquals("true", js(scenario, "JSON.parse(localStorage.getItem('skychef_save_v1')).coins === 321"));
+        }
+    }
+}

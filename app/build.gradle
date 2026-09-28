@@ -1,0 +1,48 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.hezh202.skychef'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.hezh202.skychef'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    signingConfigs {
+        release {
+            if (System.getenv('SKY_CHEF_KEYSTORE')) {
+                storeFile file(System.getenv('SKY_CHEF_KEYSTORE'))
+                storePassword System.getenv('SKY_CHEF_STORE_PASSWORD')
+                keyAlias 'sky-chef'
+                keyPassword System.getenv('SKY_CHEF_STORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (System.getenv('SKY_CHEF_KEYSTORE')) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/gameAssets')
+}
+
+// 只打包游戏运行文件，源码根目录仍可直接在浏览器打开。
+tasks.register('syncGameAssets', Sync) {
+    from(rootProject.projectDir) { include 'index.html', 'css/**', 'js/**' }
+    into layout.buildDirectory.dir('generated/gameAssets')
+}
+tasks.named('preBuild').configure { dependsOn 'syncGameAssets' }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+}
