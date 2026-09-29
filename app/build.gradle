@@ -36,7 +36,7 @@ android {
 
 // 只打包游戏运行文件，源码根目录仍可直接在浏览器打开。
 tasks.register('syncGameAssets', Sync) {
-    from(rootProject.projectDir) { include 'index.html', 'css/**', 'js/**' }
+    from(rootProject.projectDir) { include 'index.html', 'css/**', 'js/**', 'assets/**' }
     into layout.buildDirectory.dir('generated/gameAssets')
 }
 tasks.named('preBuild').configure { dependsOn 'syncGameAssets' }

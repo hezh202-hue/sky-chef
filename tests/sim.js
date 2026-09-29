@@ -193,8 +193,21 @@ function unitTests() {
   assert.ok(h.tapPlate(0));
   assert.strictEqual(h.served, 1);
   assert.ok(h.coins > 30);
+  const servedEvents = h.drainEvents();
+  assert.ok(servedEvents.some((e) => e.type === 'take' && e.fresh), 'fresh-cooked patty is picked up in time');
+  assert.ok(servedEvents.some((e) => e.type === 'pay' && e.freshBonus > 0), 'fresh assembly receives a bonus');
+  assert.strictEqual(h.freshDishes, 1);
   for (let i = 0; i < 60; i++) h.tick(0.05);
   assert.ok(h.done, 'flight ends when everyone leaves');
+
+  const stale = new SC.Flight({ menu: ['coffee'], passengers: [{ t: 0, type: 'normal', order: ['coffee'] }], seed: 22 });
+  const coffee = stale.stations.findIndex((s) => s.id === 'coffee');
+  for (let i = 0; i < 40; i++) stale.tick(0.05);
+  stale.tapStation(coffee);
+  for (let i = 0; i < 105; i++) stale.tick(0.05);
+  stale.tapStation(coffee);
+  assert.strictEqual(stale.freshDishes, 0, 'coffee picked up after the hot window is not fresh');
+  assert.ok(stale.drainEvents().some((e) => e.type === 'pay' && e.freshBonus === 0));
 
   // 颠簸时不能上菜
   const k = new SC.Flight({ menu: ['cola'], passengers: [{ t: 0, type: 'normal', order: ['cola'] }], turbulence: [{ t: 3, dur: 5 }], seed: 3 });

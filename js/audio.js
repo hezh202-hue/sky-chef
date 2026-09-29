@@ -86,7 +86,11 @@
     take: () => tone(740, 0.08, { type: 'triangle', vol: 0.3, to: 990 }),
     deliver: () => tone(600, 0.1, { type: 'triangle', vol: 0.3, to: 900 }),
     pay: () => {
-      [1046, 1318, 1568].forEach((f, i) => tone(f, 0.14, { type: 'square', vol: 0.09, delay: i * 0.06 }));
+      [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.16, { type: 'triangle', vol: 0.11, delay: i * 0.055 }));
+    },
+    fresh: () => {
+      [880, 1175, 1568, 1760].forEach((f, i) => tone(f, 0.22, { type: 'sine', vol: 0.15, delay: i * 0.055 }));
+      tone(1175, 0.34, { type: 'triangle', vol: 0.08, delay: 0.08 });
     },
     combo: () => {
       [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.2, delay: i * 0.05 }));
@@ -135,6 +139,7 @@
   const MELODY = [0, 2, 4, 2, 5, 4, 2, 0, 4, 5, 7, 5, 4, 2, 1, 2];
   const SCALE = [523.3, 587.3, 659.3, 698.5, 784.0, 880.0, 987.8, 1046.5];
   let musicTimer = null;
+  let musicTrack = null;
   let step = 0;
   let nextTime = 0;
   let tempo = 108;
@@ -159,6 +164,12 @@
     }
   }
 
+  function startSynthMusic() {
+    if (!ctx) return;
+    nextTime = ctx.currentTime + 0.1;
+    musicTimer = setInterval(scheduleMusic, 60);
+  }
+
   SC.Audio = {
     sfxOn: true,
     musicOn: true,
@@ -177,11 +188,27 @@
     startMusic() {
       if (!this.musicOn || musicTimer) return;
       if (!ensure()) return;
-      nextTime = ctx.currentTime + 0.1;
-      musicTimer = setInterval(scheduleMusic, 60);
+      if (typeof root.Audio === 'function') {
+        if (!musicTrack) {
+          musicTrack = new root.Audio('assets/sky-chef-cabin-theme.mp3');
+          musicTrack.loop = true;
+          musicTrack.preload = 'auto';
+          musicTrack.volume = 0.32;
+        }
+        musicTimer = 'track';
+        const started = musicTrack.play();
+        if (started && typeof started.catch === 'function') {
+          started.catch(() => {
+            if (musicTimer !== 'track' || !this.musicOn) return;
+            musicTimer = null;
+            startSynthMusic();
+          });
+        }
+      } else startSynthMusic();
     },
     stopMusic() {
-      if (musicTimer) clearInterval(musicTimer);
+      if (musicTimer && musicTimer !== 'track') clearInterval(musicTimer);
+      if (musicTrack) musicTrack.pause();
       musicTimer = null;
     },
     suspend() {
@@ -195,6 +222,7 @@
     },
     setTempo(t) {
       tempo = t;
+      if (musicTrack) musicTrack.playbackRate = t > 108 ? 1.05 : 1;
     },
     setMusic(on) {
       this.musicOn = on;

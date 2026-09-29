@@ -26,6 +26,7 @@
 
   const SEAT_COLS = 6;
   const TURB_WARN = 2.5;
+  const FRESH_WINDOW = 1.8; // 出锅后及时取出，获得趁热奖励
 
   class Flight {
     constructor(cfg) {
@@ -44,7 +45,7 @@
         if (def.kind === 'cooker') {
           const n = Math.max(1, this.mods.cookerSlots | 0);
           st.slots = [];
-          for (let i = 0; i < n; i++) st.slots.push({ state: 'idle', t: 0, burnT: 0 });
+          for (let i = 0; i < n; i++) st.slots.push({ state: 'idle', t: 0, burnT: 0, readyT: 0 });
         }
         return st;
       });
@@ -61,6 +62,7 @@
       this.combo = 0;
       this.maxCombo = 0;
       this.served = 0;
+      this.freshDishes = 0;
       this.angry = 0;
       this.burnt = 0;
       this.fever = 0;
@@ -189,20 +191,20 @@
     }
 
     // 把一个部件放到合适位置。返回 true 表示成功
-    placePart(part, fromStation) {
+    placePart(part, fromStation, fresh) {
       const single = this.singleRecipe(part);
       if (single) {
         if (!this.seatbelt) {
           const p = this.findPassengerFor(single.id);
           if (p) {
-            this.deliver(p, single.id, { station: fromStation });
+            this.deliver(p, single.id, { station: fromStation, fresh: !!fresh });
             return true;
           }
         }
         const i = this.emptyPlate();
         if (i >= 0) {
-          this.plates[i] = { parts: [part] };
-          this.emit('plate', { plate: i, part, station: fromStation });
+          this.plates[i] = { parts: [part], freshParts: fresh ? [part] : [] };
+          this.emit('plate', { plate: i, part, station: fromStation, fresh: !!fresh });
           return true;
         }
         return false;
@@ -210,8 +212,8 @@
       if (this.isBase(part)) {
         const i = this.emptyPlate();
         if (i >= 0) {
-          this.plates[i] = { parts: [part] };
-          this.emit('plate', { plate: i, part, station: fromStation });
+          this.plates[i] = { parts: [part], freshParts: fresh ? [part] : [] };
+          this.emit('plate', { plate: i, part, station: fromStation, fresh: !!fresh });
           return true;
         }
         return false;
@@ -242,7 +244,11 @@
         }
       }
       this.plates[pick].parts.push(part);
-      this.emit('plate', { plate: pick, part, station: fromStation });
+      if (fresh) {
+        this.plates[pick].freshParts = this.plates[pick].freshParts || [];
+        this.plates[pick].freshParts.push(part);
+      }
+      this.emit('plate', { plate: pick, part, station: fromStation, fresh: !!fresh });
       return true;
     }
 
@@ -264,6 +270,7 @@
         burnt.state = 'idle';
         burnt.t = 0;
         burnt.burnT = 0;
+        burnt.readyT = 0;
         this.emit('trash', { station: idx });
         return true;
       }
@@ -271,11 +278,13 @@
         .filter((s) => s.state === 'ready')
         .sort((a, b) => b.burnT - a.burnT)[0];
       if (ready) {
-        if (this.placePart(def.out, idx)) {
+        const fresh = ready.readyT <= FRESH_WINDOW;
+        if (this.placePart(def.out, idx, fresh)) {
           ready.state = 'idle';
           ready.t = 0;
           ready.burnT = 0;
-          this.emit('take', { station: idx });
+          ready.readyT = 0;
+          this.emit('take', { station: idx, fresh });
           return true;
         }
       }
@@ -284,6 +293,7 @@
         idle.state = 'cooking';
         idle.t = 0;
         idle.burnT = 0;
+        idle.readyT = 0;
         this.emit('cook', { station: idx });
         return true;
       }
@@ -308,7 +318,7 @@
         if (p) {
           this.plates[i] = null;
           if (this.targetPlate === i) this.targetPlate = -1;
-          this.deliver(p, r.id, { plate: i });
+          this.deliver(p, r.id, { plate: i, fresh: !!(pl.freshParts && pl.freshParts.length) });
           return true;
         }
         this.emit('nomatch', { plate: i });
@@ -347,6 +357,8 @@
       const o = p.order.find((x) => !x.done && x.id === recipeId);
       if (!o) return;
       o.done = true;
+      o.fresh = !!(src && src.fresh);
+      if (o.fresh) this.freshDishes++;
       p.patience = Math.min(p.maxPatience, p.patience + p.maxPatience * this.mods.deliverHeal);
       this.emit('deliver', Object.assign({ seat: p.seat, recipe: recipeId }, src || {}));
       if (p.order.every((x) => x.done)) this.complete(p);
@@ -355,6 +367,8 @@
     complete(p) {
       const type = SC.PTYPES[p.type];
       const frac = SC.clamp(p.patience / p.maxPatience, 0, 1);
+      const freshValue = p.order.reduce((sum, o) => sum + (o.fresh ? SC.RECIPES[o.id].price : 0), 0);
+      const freshBonus = Math.round(freshValue * 0.12);
       let price = 0;
       for (const o of p.order) price += SC.RECIPES[o.id].price;
       price *= this.mods.priceMult;
@@ -368,7 +382,7 @@
         this.combo = 0;
       }
       const comboMult = 1 + 0.04 * Math.min(this.combo, this.mods.comboCap);
-      let total = (price + tip) * comboMult * (this.feverActive ? 2 : 1) + this.mods.flatBonus;
+      let total = (price + tip + freshBonus) * comboMult * (this.feverActive ? 2 : 1) + this.mods.flatBonus;
       let bonus = 0;
       let note = null;
       if (p.type === 'critic') {
@@ -404,6 +418,7 @@
       this.emit('pay', {
         seat: p.seat,
         amount: total,
+        freshBonus,
         tip: Math.round(tip),
         combo: this.combo,
         frac,
@@ -489,14 +504,18 @@
             if (s.t >= st.def.time) {
               s.state = 'ready';
               s.burnT = 0;
+              s.readyT = 0;
               this.emit('ready', { station: si });
             }
-          } else if (s.state === 'ready' && st.def.burn) {
-            s.burnT += dt;
-            if (s.burnT >= st.def.burn * this.mods.burnMult) {
-              s.state = 'burnt';
-              this.burnt++;
-              this.emit('burn', { station: si });
+          } else if (s.state === 'ready') {
+            s.readyT += dt;
+            if (st.def.burn) {
+              s.burnT += dt;
+              if (s.burnT >= st.def.burn * this.mods.burnMult) {
+                s.state = 'burnt';
+                this.burnt++;
+                this.emit('burn', { station: si });
+              }
             }
           }
         }
@@ -650,4 +669,5 @@
 
   SC.Flight = Flight;
   SC.SEAT_COLS = SEAT_COLS;
+  SC.FRESH_WINDOW = FRESH_WINDOW;
 })(typeof window !== 'undefined' ? window : globalThis);

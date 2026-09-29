@@ -298,6 +298,7 @@
         if (!st.slots) return;
         let sig = '';
         let anyReady = false;
+        let anyFresh = false;
         let anyBurnt = false;
         let anyWarn = false;
         st.slots.forEach((s, k) => {
@@ -307,6 +308,7 @@
           else if (s.state === 'ready') {
             pct = 1;
             anyReady = true;
+            if (s.readyT <= SC.FRESH_WINDOW) anyFresh = true;
             if (st.def.burn && s.burnT > st.def.burn * f.mods.burnMult * 0.55) anyWarn = true;
           } else if (s.state === 'burnt') {
             pct = 1;
@@ -327,6 +329,7 @@
           r.sig = sig;
           r.warn = anyWarn;
         }
+        r.el.classList.toggle('fresh', anyFresh);
       });
     }
 
@@ -414,6 +417,11 @@
             const src = e.station != null ? refs.stations[e.station].el : e.plate != null ? refs.plates[e.plate].el : feverBtn;
             SC.UI.fly(SC.RECIPES[e.recipe].emoji, src, seatEl);
             SC.Audio.play('deliver');
+            if (e.fresh) {
+              const [x, y] = center(seatEl);
+              SC.UI.floatText(x, y - 56, '趁热上桌！', 'fresh');
+              SC.UI.burst(x, y - 28, ['✨', '♨️', '⭐'], 5);
+            }
             if (e.auto) {
               const [x, y] = center(seatEl);
               SC.UI.floatText(x, y - 20, '🛒 自动送达', 'small');
@@ -431,6 +439,10 @@
             if (e.note) setTimeout(() => SC.UI.floatText(x, y - 5, e.note, 'note'), 250);
             SC.Audio.play('pay');
             if (e.frac > 0.8) SC.UI.burst(x, y, ['💖', '✨', '💰'], 6);
+            if (e.freshBonus > 0) {
+              SC.UI.floatText(x, y - 54, `趁热加成 +${e.freshBonus}💰`, 'fresh');
+              SC.UI.burst(x, y - 24, ['✨', '⭐', '💰'], 7);
+            }
             if (e.combo >= 3 && e.combo % 1 === 0) {
               const [cx, cy] = center(cabin);
               SC.UI.floatText(cx, cy, `连击 ×${e.combo}!`, 'combo');
@@ -478,6 +490,7 @@
             SC.Audio.play('ready');
             break;
           case 'take':
+            SC.Audio.play(e.fresh ? 'fresh' : 'take');
             break;
           case 'burn': {
             const el = refs.stations[e.station].el;
