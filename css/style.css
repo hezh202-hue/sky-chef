@@ -2072,8 +2072,9 @@ button:disabled {
   pointer-events: none;
   opacity: 0;
   transform: translate(-30%, 0);
-  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+  text-shadow: 0 3px 4px rgba(0, 0, 0, 0.3); /* 不用 filter：动画元素上的滤镜在低端机上每帧都要重绘 */
   transition: opacity 0.25s;
+  will-change: transform;
 }
 .tut-finger.show {
   opacity: 1;

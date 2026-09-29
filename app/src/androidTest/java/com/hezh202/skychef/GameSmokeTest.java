@@ -41,7 +41,10 @@ public class GameSmokeTest {
             @Override public void onComplete(long id) { draw.countDown(); }
         }));
         assertTrue("WebView draw timed out", draw.await(15, TimeUnit.SECONDS));
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        // 有持续动画时主线程可能一直不空闲，waitForIdleSync 没有超时会卡死整个测试，改为最多等 10 秒
+        CountDownLatch idle = new CountDownLatch(1);
+        InstrumentationRegistry.getInstrumentation().waitForIdle(idle::countDown);
+        idle.await(10, TimeUnit.SECONDS);
         SystemClock.sleep(700);
         scenario.onActivity(activity -> {
             WebView web = activity.getGameWebView();
@@ -62,7 +65,8 @@ public class GameSmokeTest {
         }
         bitmap.recycle();
     }
-    @Test public void offlineGameLifecycleAndSave() throws Exception {
+    // 整体超时：万一再卡住，会带着卡住位置的调用栈失败，而不是拖到 CI 超时被取消
+    @Test(timeout = 240000) public void offlineGameLifecycleAndSave() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             waitFor(scenario, "!!document.querySelector('.menu-btn.primary')");
             assertEquals("\"https://appassets.androidplatform.net\"", js(scenario, "location.origin"));
