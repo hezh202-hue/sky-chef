@@ -227,8 +227,12 @@ button:disabled {
 }
 .topbar-title {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-title);
-  font-size: 24px;
+  font-size: clamp(16px, 4.4vw, 24px);
   color: #fff;
   text-shadow: 0 2px 0 rgba(29, 43, 83, 0.35);
 }
@@ -847,6 +851,29 @@ button:disabled {
 .passport-stats b {
   font-size: 20px;
   color: var(--navy);
+}
+.advice {
+  margin-top: 12px;
+  text-align: left;
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.advice-title {
+  font-weight: 800;
+  color: #8a5a00;
+  margin-bottom: 6px;
+}
+.advice-item {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.advice-item + .advice-item {
+  margin-top: 4px;
 }
 .unlock-note {
   margin-top: 12px;
@@ -2025,6 +2052,44 @@ button:disabled {
 .tutorial-hint.show {
   opacity: 1;
   transform: translateX(-50%);
+}
+.tutorial-hint.hold::after {
+  content: '⏸ 乘客会等你操作完';
+  position: absolute;
+  right: 12px;
+  bottom: -11px;
+  background: #ffdd00;
+  color: #5a4500;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.tut-finger {
+  position: fixed;
+  z-index: 46;
+  font-size: 34px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-30%, 0);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+  transition: opacity 0.25s;
+}
+.tut-finger.show {
+  opacity: 1;
+  animation: tap-finger 1s ease-in-out infinite;
+}
+@keyframes tap-finger {
+  0%,
+  100% {
+    transform: translate(-30%, 0) scale(1);
+  }
+  45% {
+    transform: translate(-30%, -12px) scale(1.05);
+  }
+  60% {
+    transform: translate(-30%, -4px) scale(0.92);
+  }
 }
 
 /* 特效 */

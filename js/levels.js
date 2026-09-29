@@ -112,11 +112,17 @@
       types: typeWeights(c, l),
     });
     if (c === 0 && l === 0) {
-      // 教学关：第一位点橙汁，第二位点咖啡
-      passengers[0].order = ['juice'];
-      passengers[1].order = ['coffee'];
-      passengers[1].t = Math.max(passengers[1].t, 7);
-      passengers.forEach((p) => (p.type = 'normal'));
+      // 教学关：手工编排，饮品交替出现、间隔宽松，保证第一次玩的人能顺利体验成功
+      const script = [
+        [1, 'juice'],
+        [6, 'coffee'],
+        [13, 'juice'],
+        [18, 'coffee'],
+        [24, 'coffee'],
+        [28, 'juice'],
+      ];
+      passengers.length = 0;
+      for (const [t, id] of script) passengers.push({ t, type: 'normal', order: [id] });
     }
     let turbCount = 0;
     if (c === 0) turbCount = l >= 4 ? 1 : 0;

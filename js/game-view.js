@@ -7,22 +7,24 @@
   const PLATE_KEYS = ['q', 'w', 'e', 'r', 't', 'y'];
 
   // 教程脚本：key 为 "城市-关卡"
+  // hold: 提示显示期间暂停乘客（不登机、耐心不掉），让新手可以从容照着做
+  const waitingFor = (id) => (f) => f.seats.some((p) => p && p.state === 'wait' && p.order.some((o) => !o.done && o.id === id));
   const TUTORIALS = {
     '0-0': [
       { text: '欢迎登机，见习大厨！乘客坐下后，头顶气泡是他的点单，下方彩条是耐心值。', done: (f) => f.seats.some((p) => p && p.state === 'wait') , minTime: 2.5 },
-      { text: '有人点了橙汁 🧃！点击【榨汁机】，橙汁会直接送到他手上。', target: 'station:juicer', done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.recipe === 'juice') },
-      { text: '下一位想要咖啡 ☕。咖啡需要冲泡：点击【咖啡机】开始制作。', target: 'station:coffee', done: (f, ev) => ev.some((e) => e.type === 'cook') },
-      { text: '进度条走满就好了！再点一次咖啡机，把咖啡送出去。', target: 'station:coffee', done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.recipe === 'coffee') || ev.some((e) => e.type === 'plate') },
+      { text: '有人点了橙汁 🧃！点击【榨汁机】，橙汁会直接送到他手上。', target: 'station:juicer', hold: true, done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.recipe === 'juice') },
+      { text: '这位乘客想要咖啡 ☕。咖啡需要冲泡：点击【咖啡机】开始制作。', target: 'station:coffee', hold: true, waitFor: waitingFor('coffee'), done: (f, ev) => ev.some((e) => e.type === 'cook') },
+      { text: '进度条走满就好了！再点一次咖啡机，把咖啡送出去。', target: 'station:coffee', hold: true, done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.recipe === 'coffee') || ev.some((e) => e.type === 'plate') },
       { text: '干得漂亮！服务越快小费越多；连续让乘客满意能叠加【连击】加成。', timeout: 5 },
-      { text: '狂热条满了！点击右侧 🔥 按钮：收入翻倍、耐心冻结、烹饪加速！', target: 'fever', waitFor: (f) => f.fever >= 100, done: (f, ev) => ev.some((e) => e.type === 'fever') },
+      { text: '狂热条满了！点击右侧 🔥 按钮：收入翻倍、耐心冻结、烹饪加速！', target: 'fever', hold: true, waitFor: (f) => f.fever >= 100, done: (f, ev) => ev.some((e) => e.type === 'fever') },
     ],
     '0-1': [
-      { text: '小笼包要蒸：点【蒸笼】开始，蒸好后记得及时取出——放太久会烤焦！', target: 'station:steamer', done: (f, ev) => ev.some((e) => e.type === 'take'), minTime: 1 },
+      { text: '小笼包要蒸：点【蒸笼】开始，蒸好后记得及时取出——放太久会烤焦！', target: 'station:steamer', hold: true, waitFor: waitingFor('xlb'), done: (f, ev) => ev.some((e) => e.type === 'take'), minTime: 1 },
     ],
     '0-4': [
-      { text: '组合菜要在备餐盘上拼装：先点【面糊】🫓 起一个盘子。', target: 'station:crepe', waitFor: (f) => f.seats.some((p) => p && p.state === 'wait' && p.order.some((o) => o.id === 'jianbing')), done: (f, ev) => ev.some((e) => e.type === 'plate' && e.part === 'crepe') },
-      { text: '再点【煎蛋锅】开火，煎好后点一次，煎蛋会自动放到盘子上。', target: 'station:griddle', done: (f, ev) => ev.some((e) => e.type === 'plate' && e.part === 'egg') },
-      { text: '煎饼果子做好啦！点击这个备餐盘就能送给乘客。', target: 'plates', done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.plate != null) },
+      { text: '组合菜要在备餐盘上拼装：先点【面糊】🫓 起一个盘子。', target: 'station:crepe', hold: true, waitFor: waitingFor('jianbing'), done: (f, ev) => ev.some((e) => e.type === 'plate' && e.part === 'crepe') },
+      { text: '再点【煎蛋锅】开火，煎好后点一次，煎蛋会自动放到盘子上。', target: 'station:griddle', hold: true, done: (f, ev) => ev.some((e) => e.type === 'plate' && e.part === 'egg') },
+      { text: '煎饼果子做好啦！点击这个备餐盘就能送给乘客。', target: 'plates', hold: true, done: (f, ev) => ev.some((e) => e.type === 'deliver' && e.plate != null) },
       { text: '小技巧：点一下空盘子或未完成的盘子可以把它设为【目标盘】，配料会优先放上去。盘子右上角 ✕ 可以倒掉。', timeout: 6 },
     ],
     '1-0': [
@@ -148,7 +150,8 @@
 
     const banner = h('div.banner');
     const hint = h('div.tutorial-hint');
-    node.append(hud, cabin, galley, banner, hint);
+    const finger = h('div.tut-finger', '👆');
+    node.append(hud, cabin, galley, banner, hint, finger);
 
     // ---------- 状态 ----------
     let raf = 0;
@@ -184,12 +187,24 @@
       }
       return null;
     }
+    function tutClear() {
+      if (tutHighlighted) tutHighlighted.classList.remove('highlight');
+      tutHighlighted = null;
+      hint.classList.remove('show', 'hold');
+      finger.classList.remove('show');
+      f.hold = false;
+    }
+    // 教学手指：跟随高亮目标
+    function tutFinger() {
+      if (!tutHighlighted) return;
+      const r = tutHighlighted.getBoundingClientRect();
+      finger.style.left = r.left + r.width * 0.62 + 'px';
+      finger.style.top = r.top + r.height * 0.62 + 'px';
+    }
     function tutAdvance() {
       tutStep++;
       tutT = 0;
-      if (tutHighlighted) tutHighlighted.classList.remove('highlight');
-      tutHighlighted = null;
-      hint.classList.remove('show');
+      tutClear();
       if (tutStep >= tutorial.length) {
         Save.data.seen['tut-' + tutKey] = 1;
         Save.save();
@@ -204,12 +219,16 @@
       if (!hint.classList.contains('show')) {
         hint.textContent = s.text;
         hint.classList.add('show');
+        hint.classList.toggle('hold', !!s.hold);
+        f.hold = !!s.hold;
         const t = tutTarget(s.target);
         if (t) {
           t.classList.add('highlight');
           tutHighlighted = t;
+          finger.classList.add('show');
         }
       }
+      tutFinger();
       tutT += dt;
       if (s.minTime && tutT < s.minTime) return;
       if ((s.done && s.done(f, events)) || (s.timeout && tutT >= s.timeout)) tutAdvance();
@@ -572,8 +591,7 @@
         Save.save();
       }
       SC.Audio.setTempo(108);
-      if (tutHighlighted) tutHighlighted.classList.remove('highlight');
-      hint.classList.remove('show');
+      tutClear();
       showBanner(f.failed ? '航班提前结束……' : '🛬 航班抵达！', f.failed ? 'warn' : 'ok', 1500);
       setTimeout(() => {
         if (!destroyed && opts.onEnd) opts.onEnd(f);

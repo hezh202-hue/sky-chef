@@ -81,6 +81,8 @@
       this.turbLeft = 0;
 
       this.paused = false;
+      // 教学暂停：乘客不登机、耐心不消耗、颠簸不推进，但厨房照常运作，方便新手照着提示操作
+      this.hold = false;
       this.done = false;
       this.failed = false;
       this.events = [];
@@ -479,9 +481,11 @@
     tick(dt) {
       if (this.done || this.paused) return;
       if (dt > 0.25) dt = 0.25;
-      this.time += dt;
+      const hold = this.hold;
+      if (!hold) this.time += dt;
       const fever = this.feverActive;
-      if (fever) {
+      if (!fever && !hold && this.fever >= 100) this.feverIdleT = (this.feverIdleT || 0) + dt; // 狂热攒满却没用的时长
+      if (fever && !hold) {
         this.feverT -= dt;
         if (this.feverT <= 0) {
           this.feverT = 0;
@@ -491,7 +495,7 @@
       }
 
       // 颠簸
-      this.updateTurbulence(dt);
+      if (!hold) this.updateTurbulence(dt);
 
       // 烹饪
       const speed = this.mods.cookSpeed * (fever ? 2 : 1);
@@ -509,7 +513,7 @@
             }
           } else if (s.state === 'ready') {
             s.readyT += dt;
-            if (st.def.burn) {
+            if (st.def.burn && !hold) {
               s.burnT += dt;
               if (s.burnT >= st.def.burn * this.mods.burnMult) {
                 s.state = 'burnt';
@@ -522,7 +526,7 @@
       }
 
       // 登机
-      while (this.queue.length && this.queue[0].t <= this.time) {
+      while (!hold && this.queue.length && this.queue[0].t <= this.time) {
         const free = [];
         for (let i = 0; i < this.seats.length; i++) if (!this.seats[i]) free.push(i);
         if (!free.length) break;
@@ -534,12 +538,12 @@
       for (let i = 0; i < this.seats.length; i++) {
         const p = this.seats[i];
         if (!p) continue;
-        this.updatePassenger(p, dt, fever);
+        this.updatePassenger(p, dt, fever || hold);
         if (this.done) return;
       }
 
       // 自动送饮料（天赋）
-      if (this.mods.autodrink > 0 && !this.seatbelt) {
+      if (this.mods.autodrink > 0 && !this.seatbelt && !hold) {
         this.autodrinkT += dt;
         if (this.autodrinkT >= this.mods.autodrink) {
           this.autodrinkT = 0;
@@ -621,6 +625,7 @@
           }
           break;
         case 'wait': {
+          p.waitT = (p.waitT || 0) + dt; // 已点单时长（模拟器用来模拟玩家“看到点单”的反应时间）
           if (fever) break;
           let rate = this.mods.drainMult;
           if (this.seatbelt) rate *= 0.4;

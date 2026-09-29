@@ -16,6 +16,16 @@ const verbose = process.argv.includes('--verbose');
 
 // ---------- 机器人 ----------
 // delay：两次操作的最短间隔（秒），模拟玩家手速
+// LAG：乘客点单后多久机器人才“注意到”（秒），模拟真人看单、找设备的反应时间
+let LAG = 0;
+function visibleDemand(f) {
+  const d = {};
+  for (const p of f.seats) {
+    if (!p || p.state !== 'wait' || (p.waitT || 0) < LAG) continue;
+    for (const o of p.order) if (!o.done) d[o.id] = (d[o.id] || 0) + 1;
+  }
+  return d;
+}
 function botStep(f, sloppy) {
   if (sloppy && Math.random() < sloppy) {
     // 手滑：随便点一下
@@ -23,7 +33,7 @@ function botStep(f, sloppy) {
     return f.tapPlate(Math.floor(Math.random() * f.plates.length)), true;
   }
   if (f.fever >= 100 && !f.feverActive) return f.activateFever();
-  const dem = f.demand(false);
+  const dem = visibleDemand(f);
   // 1. 送出完成的菜
   if (!f.seatbelt) {
     for (let i = 0; i < f.plates.length; i++) {
@@ -93,7 +103,7 @@ function anyNeedsExtension(f, pl, dem) {
 
 // 还需要多少部件（扣除盘子上已有的）
 function remainingNeed(f) {
-  const dem = f.demand(false);
+  const dem = visibleDemand(f);
   const part = {};
   const base = {};
   // 盘子上已有的菜按需求抵扣
@@ -131,7 +141,8 @@ function usefulPart(f, part, need) {
   return f.plates.some((pl) => pl && f.canExtend(pl.parts, part));
 }
 
-function playFlight(cfg, delay, sloppy) {
+function playFlight(cfg, delay, sloppy, lag) {
+  LAG = lag || 0;
   const f = new SC.Flight(cfg);
   const dt = 0.05;
   let cd = 0;
@@ -253,20 +264,21 @@ function unitTests() {
 
 // ---------- 难度曲线 ----------
 function balance() {
+  // [名称, 操作间隔, 失误率, 反应时间]
   const skills = [
-    ['高手', 0.3],
-    ['普通', 0.55],
-    ['新手', 0.9],
-    ['手残', 1.0, 0.2],
+    ['高手', 0.3, 0, 0.4],
+    ['普通', 0.55, 0.03, 1.0],
+    ['新手', 0.9, 0.06, 1.8],
+    ['手残', 1.0, 0.2, 2.5],
   ];
   const rows = [];
   let ok = true;
   for (let c = 0; c < SC.CITIES.length; c++) {
     for (let l = 0; l < SC.LEVELS_PER_CITY; l++) {
       const row = [`${SC.CITIES[c].name}-${l + 1}`];
-      for (const [, delay, sloppy] of skills) {
+      for (const [, delay, sloppy, lag] of skills) {
         const cfg = SC.campaignFlight(c, l, {});
-        const f = playFlight(cfg, delay, sloppy);
+        const f = playFlight(cfg, delay, sloppy, lag);
         row.push(`${f.stars}★ r${(f.coins / cfg.baseValue).toFixed(2)} 怒${f.angry}/${f.totalPassengers} ${Math.round(f.time)}s`);
         if (delay === 0.3 && f.stars < 2) ok = false;
       }

@@ -252,6 +252,24 @@
     );
   }
 
+  // 结算建议：根据本局数据挑出最值得改进的 1~2 点，让玩家知道“下次怎么打得更好”
+  function adviceFor(f) {
+    const tips = [];
+    if (f.burnt >= 2) tips.push(['💨', `烤焦了 ${f.burnt} 份。设备发红闪烁时要赶紧取出；暂时用不上的菜先别开火。`]);
+    if (f.angry > 0) tips.push(['⏱️', `${f.angry} 位乘客等太久离开了。优先照顾耐心条变红的乘客；耗时长的菜（蒸、烤）提前开火。`]);
+    if ((f.feverIdleT || 0) > 6) tips.push(['🔥', `狂热条满了 ${Math.round(f.feverIdleT)} 秒却没用。攒满就点，收入翻倍还能冻结耐心！`]);
+    if (f.feverCount === 0 && f.served >= 8 && !tips.some((t) => t[0] === '🔥')) tips.push(['🔥', '人多的时候点狂热最划算：收入翻倍、耐心冻结。']);
+    if (f.served >= 6 && f.maxCombo < 4) tips.push(['🔗', '连击能让收入最高 +40%。尽量在乘客耐心过半前上完菜，别让连击断掉。']);
+    if (f.served >= 6 && (f.freshDishes || 0) === 0) tips.push(['♨️', '设备刚做好时会发金光，这时取出上桌有额外小费。']);
+    if (!tips.length) tips.push(['💸', '上菜越快小费越多：趁乘客耐心条还是绿色时送达，收入最高。']);
+    return tips.slice(0, 2);
+  }
+  function adviceBlock(f) {
+    const tips = adviceFor(f);
+    if (!tips.length) return null;
+    return h('div.advice', h('div.advice-title', '💡 机长的建议'), tips.map(([e, t]) => h('div.advice-item', h('span', e), h('span', t))));
+  }
+
   S.startCampaign = function (c, l) {
     const cfg = SC.campaignFlight(c, l, Save.data.upgrades);
     flightIntro(cfg, null, () => play(cfg, (f) => S.campaignResult(f, cfg), () => S.campaign(c)), () => {});
@@ -291,7 +309,7 @@
     UI.modal({
       title: pass ? '🛬 航班顺利抵达！' : '😣 乘客们不太满意……',
       cls: 'result',
-      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰` : '完美航班！') : `至少需要 ${cfg.targets[0]} 💰 才能过关`), statsBlock(f), unlockNote),
+      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), statsBlock(f), stars < 3 ? adviceBlock(f) : null, unlockNote),
       buttons: [
         { label: '地图', onClick: () => S.campaign(c) },
         { label: '重试', onClick: () => S.startCampaign(c, l) },
@@ -572,7 +590,7 @@
       Save.save();
       SC.Audio.play('lose');
       const why = f.bossFailed ? '总统愤怒地离开了专机……' : '口碑跌到谷底，航空公司停飞了你的航线。';
-      UI.modal({ title: '💔 冒险结束', cls: 'result', body: h('div', h('p', why), statsBlock(f)), buttons: [{ label: '结算', cls: 'primary', onClick: () => S.runEnd(false) }] });
+      UI.modal({ title: '💔 冒险结束', cls: 'result', body: h('div', h('p', why), statsBlock(f), adviceBlock(f)), buttons: [{ label: '结算', cls: 'primary', onClick: () => S.runEnd(false) }] });
       return;
     }
     moveTo(run, n);

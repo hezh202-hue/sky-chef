@@ -121,7 +121,7 @@
     {
       id: 'shanghai',
       name: '上海',
-      flag: '🇨🇳',
+      flag: '🏮',
       route: '上海 → 东京',
       plane: '东方明珠号',
       theme: 'dawn',
@@ -134,7 +134,7 @@
     {
       id: 'newyork',
       name: '纽约',
-      flag: '🇺🇸',
+      flag: '🗽',
       route: '纽约 → 洛杉矶',
       plane: '自由鹰号',
       theme: 'day',
@@ -146,7 +146,7 @@
     {
       id: 'paris',
       name: '巴黎',
-      flag: '🇫🇷',
+      flag: '🗼',
       route: '巴黎 → 罗马',
       plane: '玫瑰号',
       theme: 'sunset',
@@ -158,7 +158,7 @@
     {
       id: 'tokyo',
       name: '东京',
-      flag: '🇯🇵',
+      flag: '🗻',
       route: '东京 → 悉尼',
       plane: '樱花号',
       theme: 'night',
