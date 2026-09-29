@@ -194,7 +194,7 @@
       finger.classList.remove('show');
       f.hold = false;
     }
-    // 教学手指：跟随高亮目标
+    // 教学手指：只在每步开始和窗口尺寸变化时定位（不要每帧读布局，低端机上很耗电）
     function tutFinger() {
       if (!tutHighlighted) return;
       const r = tutHighlighted.getBoundingClientRect();
@@ -226,9 +226,9 @@
           t.classList.add('highlight');
           tutHighlighted = t;
           finger.classList.add('show');
+          tutFinger();
         }
       }
-      tutFinger();
       tutT += dt;
       if (s.minTime && tutT < s.minTime) return;
       if ((s.done && s.done(f, events)) || (s.timeout && tutT >= s.timeout)) tutAdvance();
@@ -675,6 +675,7 @@
         SC.UI.setTheme(cfg.theme);
         document.addEventListener('keydown', onKey);
         document.addEventListener('visibilitychange', onVis);
+        root.addEventListener('resize', tutFinger);
         raf = requestAnimationFrame(frame);
       },
       destroy() {
@@ -683,6 +684,7 @@
         clearTimeout(bannerTimer);
         document.removeEventListener('keydown', onKey);
         document.removeEventListener('visibilitychange', onVis);
+        root.removeEventListener('resize', tutFinger);
         SC.Audio.setTempo(108);
       },
       get events() {
