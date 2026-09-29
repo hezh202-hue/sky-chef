@@ -187,15 +187,73 @@
     president: { name: '总统', faces: ['🕴️'], patience: 1, tip: 3, badge: '🎩', desc: '专机的主人。怠慢他，一切都完了。' },
   };
 
-  // ---------- 厨房升级（生涯模式，金币购买） ----------
+  // ---------- 设备升级（生涯模式，按设备单独升级，金币购买） ----------
+  // 每台设备 3 级，效果按设备类型区分；越晚解锁的城市，设备越贵
+  SC.STATION_LEVELS = {
+    cooker: [
+      { short: '快', desc: '烹饪速度 +30%，售价 +10%' },
+      { short: '双', desc: '可以同时做 2 份，售价 +10%' },
+      { short: '稳', desc: '保温时间 ×2 不易烤焦，售价 +10%' },
+    ],
+    dispenser: [
+      { short: '价', desc: '售价 +12%' },
+      { short: '价', desc: '售价再 +12%' },
+      { short: '价', desc: '售价再 +12%' },
+    ],
+    base: [
+      { short: '价', desc: '售价 +12%' },
+      { short: '价', desc: '售价再 +12%' },
+      { short: '价', desc: '售价再 +12%' },
+    ],
+  };
+  // 每级售价加成；组合菜取各部件加成的平均值（升级全部部件才能拿满，避免叠加失控）
+  SC.STATION_PRICE_BONUS = { dispenser: 0.12, base: 0.12, cooker: 0.1 };
+  const STATION_COSTS = { cooker: [150, 420, 950], dispenser: [100, 280, 650], base: [120, 340, 780] };
+  // 设备最早出现在哪座城市（决定价格档位与升级界面的分组）
+  SC.stationFirstLevel = function (sid) {
+    for (let c = 0; c < SC.CITIES.length; c++) {
+      for (let l = 0; l < SC.LEVELS_PER_CITY; l++) {
+        for (const rid of SC.CITIES[c].unlocks[l]) {
+          if (SC.RECIPES[rid].parts.some((p) => SC.PART_SOURCE[p] === sid)) return [c, l];
+        }
+      }
+    }
+    return [SC.CITIES.length - 1, 0];
+  };
+  SC.stationCity = (sid) => SC.stationFirstLevel(sid)[0];
+  // 这台设备做哪些菜（升级界面展示用）
+  SC.dishesOfStation = function (sid) {
+    const out = SC.STATIONS[sid].out;
+    return Object.keys(SC.RECIPES).filter((rid) => SC.RECIPES[rid].parts.includes(out));
+  };
+  SC.stationUpgradeCost = function (sid, lv) {
+    const base = STATION_COSTS[SC.STATIONS[sid].kind][lv];
+    if (base == null) return null;
+    return Math.round((base * (1 + 0.6 * SC.stationCity(sid))) / 10) * 10;
+  };
+
+  // ---------- 机舱装饰（生涯模式，全局生效） ----------
   SC.UPGRADES = [
-    { id: 'speed', name: '涡轮厨具', emoji: '⚡', desc: '所有烹饪设备速度 +15%', costs: [80, 200, 420] },
-    { id: 'burn', name: '保温涂层', emoji: '🛡️', desc: '食物烤焦前的保温时间 +40%', costs: [60, 160, 360] },
-    { id: 'plates', name: '加长备餐台', emoji: '🍽️', desc: '备餐盘 +1', costs: [150, 450] },
-    { id: 'patience', name: '舒适座椅', emoji: '💺', desc: '乘客耐心 +10%', costs: [100, 250, 500] },
-    { id: 'price', name: '精美餐具', emoji: '🥂', desc: '菜品售价 +10%', costs: [120, 300, 600] },
-    { id: 'fever', name: '空乘培训', emoji: '🎓', desc: '狂热值积累 +25%', costs: [90, 260] },
-    { id: 'slots', name: '双头炉灶', emoji: '🔥', desc: '所有烹饪设备可同时做 2 份', costs: [700] },
+    { id: 'patience', name: '舒适座椅', emoji: '💺', desc: '乘客耐心 +10%', costs: [300, 800, 1700] },
+    { id: 'tip', name: '氛围灯光', emoji: '💡', desc: '小费 +20%', costs: [350, 950, 2000] },
+    { id: 'fever', name: '空乘培训', emoji: '🎓', desc: '狂热值积累 +25%', costs: [250, 750] },
+    { id: 'plates', name: '加长备餐台', emoji: '🍽️', desc: '备餐盘 +1', costs: [900, 2400] },
+  ];
+  // 旧版全局升级（已改为按设备升级），读档时按原价退还金币
+  SC.LEGACY_UPGRADES = {
+    speed: [80, 200, 420],
+    burn: [60, 160, 360],
+    price: [120, 300, 600],
+    slots: [700],
+  };
+
+  // ---------- 关前道具（消耗星钻 💎） ----------
+  // 星钻来源：每关首次拿到的每颗星 +1，每个护照印章 +3
+  SC.GEMS_PER_ACH = 3;
+  SC.BOOSTERS = [
+    { id: 'fever', name: '开局狂热', emoji: '🔥', desc: '起飞时狂热条直接满', cost: 2 },
+    { id: 'calm', name: '安神香薰', emoji: '🕯️', desc: '本班乘客耐心 +20%', cost: 2 },
+    { id: 'tray', name: '临时餐车', emoji: '🛒', desc: '本班备餐盘 +1', cost: 1 },
   ];
 
   // ---------- 成就（护照印章） ----------

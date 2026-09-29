@@ -1,164 +1,8 @@
 // 无头测试：加载游戏逻辑，用机器人玩家跑遍所有关卡，检查引擎正确性与难度曲线。
 // 用法：node tests/sim.js [--verbose]
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
 const assert = require('assert');
-
-const ctx = { console, Math, Date, JSON, Object, Array, Set, Map, Infinity };
-ctx.globalThis = ctx;
-vm.createContext(ctx);
-for (const f of ['util.js', 'data.js', 'engine.js', 'levels.js', 'run.js']) {
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), ctx, { filename: f });
-}
-const SC = ctx.SC;
+const { SC, SKILLS, playFlight } = require('./bot');
 const verbose = process.argv.includes('--verbose');
-
-// ---------- 机器人 ----------
-// delay：两次操作的最短间隔（秒），模拟玩家手速
-// LAG：乘客点单后多久机器人才“注意到”（秒），模拟真人看单、找设备的反应时间
-let LAG = 0;
-function visibleDemand(f) {
-  const d = {};
-  for (const p of f.seats) {
-    if (!p || p.state !== 'wait' || (p.waitT || 0) < LAG) continue;
-    for (const o of p.order) if (!o.done) d[o.id] = (d[o.id] || 0) + 1;
-  }
-  return d;
-}
-function botStep(f, sloppy) {
-  if (sloppy && Math.random() < sloppy) {
-    // 手滑：随便点一下
-    if (Math.random() < 0.7) return f.tapStation(Math.floor(Math.random() * f.stations.length)), true;
-    return f.tapPlate(Math.floor(Math.random() * f.plates.length)), true;
-  }
-  if (f.fever >= 100 && !f.feverActive) return f.activateFever();
-  const dem = visibleDemand(f);
-  // 1. 送出完成的菜
-  if (!f.seatbelt) {
-    for (let i = 0; i < f.plates.length; i++) {
-      const pl = f.plates[i];
-      if (!pl) continue;
-      const r = f.recipeFor(pl.parts);
-      if (r && dem[r.id] && !f.canExtendAny(pl.parts)) return f.tapPlate(i);
-      if (r && dem[r.id] && !anyNeedsExtension(f, pl, dem)) return f.tapPlate(i);
-    }
-  }
-  // 2. 清理焦糊
-  for (let i = 0; i < f.stations.length; i++) {
-    const st = f.stations[i];
-    if (st.slots && st.slots.some((s) => s.state === 'burnt')) return f.tapStation(i);
-  }
-  const need = remainingNeed(f);
-  // 3. 取出做好的东西 / 配料
-  for (let i = 0; i < f.stations.length; i++) {
-    const st = f.stations[i];
-    const part = st.def.out;
-    if (st.def.kind === 'cooker') {
-      if (st.slots.some((s) => s.state === 'ready') && usefulPart(f, part, need)) return f.tapStation(i);
-    } else if (st.def.kind === 'dispenser') {
-      if (usefulPart(f, part, need)) return f.tapStation(i);
-    }
-  }
-  // 4. 起新盘
-  for (let i = 0; i < f.stations.length; i++) {
-    const st = f.stations[i];
-    if (st.def.kind !== 'base') continue;
-    if ((need.base[st.def.out] || 0) > 0 && f.plates.includes(null)) return f.tapStation(i);
-  }
-  // 5. 开火
-  for (let i = 0; i < f.stations.length; i++) {
-    const st = f.stations[i];
-    if (st.def.kind !== 'cooker') continue;
-    const part = st.def.out;
-    const inProgress = st.slots.filter((s) => s.state === 'cooking' || s.state === 'ready').length;
-    if ((need.part[part] || 0) > inProgress && st.slots.some((s) => s.state === 'idle')) return f.tapStation(i);
-  }
-  // 6. 清理没用的盘子
-  if (!f.plates.includes(null)) {
-    for (let i = 0; i < f.plates.length; i++) {
-      const pl = f.plates[i];
-      const useful = Object.keys(dem).some((id) => {
-        const r = SC.RECIPES[id];
-        return r.parts[0] === pl.parts[0] && pl.parts.every((x) => r.parts.includes(x));
-      });
-      if (!useful) return f.discardPlate(i);
-    }
-  }
-  return false;
-}
-
-function anyNeedsExtension(f, pl, dem) {
-  for (const id in dem) {
-    const r = SC.RECIPES[id];
-    if (r.parts.length > pl.parts.length && r.parts[0] === pl.parts[0] && pl.parts.every((p) => r.parts.includes(p))) {
-      // 如果当前盘子本身也有人要，就直接送
-      const cur = f.recipeFor(pl.parts);
-      if (cur && dem[cur.id] > 0) return false;
-      return true;
-    }
-  }
-  return false;
-}
-
-// 还需要多少部件（扣除盘子上已有的）
-function remainingNeed(f) {
-  const dem = visibleDemand(f);
-  const part = {};
-  const base = {};
-  // 盘子上已有的菜按需求抵扣
-  const plates = f.plates.filter(Boolean).map((p) => p.parts.slice());
-  const used = new Set();
-  for (const id in dem) {
-    const r = SC.RECIPES[id];
-    for (let k = 0; k < dem[id]; k++) {
-      // 找一个能成为 r 的盘子
-      let pi = -1;
-      for (let i = 0; i < plates.length; i++) {
-        if (used.has(i)) continue;
-        const pp = plates[i];
-        if (pp[0] === r.parts[0] && pp.every((x) => r.parts.includes(x))) {
-          pi = i;
-          break;
-        }
-      }
-      if (pi >= 0) {
-        used.add(pi);
-        for (const x of r.parts) if (!plates[pi].includes(x)) part[x] = (part[x] || 0) + 1;
-      } else {
-        if (r.parts.length > 1) base[r.parts[0]] = (base[r.parts[0]] || 0) + 1;
-        for (const x of r.parts.length > 1 ? r.parts.slice(1) : r.parts) part[x] = (part[x] || 0) + 1;
-      }
-    }
-  }
-  return { part, base };
-}
-
-function usefulPart(f, part, need) {
-  if (!(need.part[part] > 0)) return false;
-  const single = f.singleRecipe(part);
-  if (single) return !f.seatbelt ? !!f.findPassengerFor(single.id) || f.plates.includes(null) : f.plates.includes(null);
-  return f.plates.some((pl) => pl && f.canExtend(pl.parts, part));
-}
-
-function playFlight(cfg, delay, sloppy, lag) {
-  LAG = lag || 0;
-  const f = new SC.Flight(cfg);
-  const dt = 0.05;
-  let cd = 0;
-  let steps = 0;
-  while (!f.done && steps < 20 * 60 * 20) {
-    f.tick(dt);
-    cd -= dt;
-    if (cd <= 0) {
-      if (botStep(f, sloppy)) cd = delay;
-    }
-    f.drainEvents();
-    steps++;
-  }
-  assert.ok(f.done, 'flight should finish');
-  return f;
-}
 
 // ---------- 单元测试 ----------
 function unitTests() {
@@ -259,18 +103,49 @@ function unitTests() {
       }
     }
   }
+  // 设备升级：1 级更快、2 级双份、3 级保温翻倍；售价按部件平均加成
+  const up = new SC.Flight({ menu: ['burger', 'cola'], passengers: [{ t: 999, type: 'normal', order: ['burger'] }], seed: 9, mods: { stationLv: { grill: 3, cola: 2 } } });
+  const grill = up.stations.find((s) => s.id === 'grill');
+  assert.strictEqual(grill.slots.length, 2, '2 级烹饪设备可同时做 2 份');
+  assert.strictEqual(grill.speed, 1.3);
+  assert.strictEqual(up.burnLimit(grill), SC.STATIONS.grill.burn * 2);
+  assert.ok(Math.abs(up.recipePrice('cola') - 8 * 1.24) < 1e-9, '即取设备 2 级售价 +24%');
+  assert.ok(Math.abs(up.recipePrice('burger') - 22 * (1 + 0.3 / 2)) < 1e-9, '组合菜取部件平均加成');
+  const up0 = new SC.Flight({ menu: ['burger'], passengers: [{ t: 999, type: 'normal', order: ['burger'] }], seed: 9 });
+  up0.tapStation(up0.stations.findIndex((s) => s.id === 'grill'));
+  for (let i = 0; i < 60; i++) up0.tick(0.05);
+  up.tapStation(up.stations.indexOf(grill));
+  for (let i = 0; i < 60; i++) up.tick(0.05);
+  assert.ok(grill.slots[0].t > up0.stations.find((s) => s.id === 'grill').slots[0].t, '升级后烹饪更快');
+
+  // 关前道具
+  const bm = SC.modsFromUpgrades({ plates: 1 }, {}, ['fever', 'calm', 'tray']);
+  assert.strictEqual(bm.plates, 5);
+  assert.ok(Math.abs(bm.patienceMult - 1.2) < 1e-9);
+  assert.strictEqual(new SC.Flight(SC.campaignFlight(0, 2, {}, {}, ['fever'])).fever, 100);
+
+  // 升级不应抬高星级目标
+  assert.deepStrictEqual(SC.campaignFlight(2, 3, {}).targets, SC.campaignFlight(2, 3, { tip: 3 }, { oven: 3 }).targets);
+
+  // 存档 v1 -> v2：退还旧升级、补发星钻
+  SC.Save.data = Object.assign(SC.Save.data, { v: 1, coins: 10, upgrades: { speed: 2, slots: 1, patience: 1 }, stars: { '0-0': 3, '0-1': 2 }, ach: { first_flight: 1 }, gems: 0 });
+  SC.Save.migrateV2({ v: 1 });
+  assert.strictEqual(SC.Save.data.coins, 10 + 80 + 200 + 700);
+  assert.deepStrictEqual(Object.keys(SC.Save.data.upgrades), ['patience']);
+  assert.strictEqual(SC.Save.data.gems, 5 + SC.GEMS_PER_ACH);
+  SC.Save.reset();
+
+  // 波次登机：同一波乘客间隔短
+  const wave = SC.campaignFlight(3, 5, {}).passengers;
+  assert.ok(wave.some((p, i) => i > 0 && p.t - wave[i - 1].t < 1.3), '后期关卡有扎堆登机');
+  for (let i = 1; i < wave.length; i++) assert.ok(wave[i].t >= wave[i - 1].t, '登机时间递增');
+
   console.log('✔ 单元测试全部通过');
 }
 
 // ---------- 难度曲线 ----------
 function balance() {
-  // [名称, 操作间隔, 失误率, 反应时间]
-  const skills = [
-    ['高手', 0.3, 0, 0.4],
-    ['普通', 0.55, 0.03, 1.0],
-    ['新手', 0.9, 0.06, 1.8],
-    ['手残', 1.0, 0.2, 2.5],
-  ];
+  const skills = SKILLS;
   const rows = [];
   let ok = true;
   for (let c = 0; c < SC.CITIES.length; c++) {
@@ -279,15 +154,16 @@ function balance() {
       for (const [, delay, sloppy, lag] of skills) {
         const cfg = SC.campaignFlight(c, l, {});
         const f = playFlight(cfg, delay, sloppy, lag);
-        row.push(`${f.stars}★ r${(f.coins / cfg.baseValue).toFixed(2)} 怒${f.angry}/${f.totalPassengers} ${Math.round(f.time)}s`);
-        if (delay === 0.3 && f.stars < 2) ok = false;
+        row.push(`${f.stars}★ ${f.coins}💰 怒${f.angry}/${f.totalPassengers}`);
+        if (lag === 1.8 && f.stars < 1) ok = false;
       }
       rows.push(row);
     }
   }
   console.log('\n关卡            ' + skills.map((s) => s[0].padEnd(24)).join(''));
   for (const r of rows) console.log(r[0].padEnd(12) + r.slice(1).map((x) => x.padEnd(26)).join(''));
-  if (!ok) console.log('⚠ 有关卡连高手机器人都拿不到 2 星');
+  if (!ok) console.log('⚠ 有关卡新手不升级就过不了关');
+  progression();
 
   // 环球冒险：跑几条完整路线
   let wins = 0;
@@ -322,6 +198,57 @@ function balance() {
     if (verbose) console.log(`run ${s}: ${run.won ? '胜利' : '失败'} 层${run.layer} 口碑${run.rep} perks=${run.perks.join(',')}`);
   }
   console.log(`\n环球冒险（普通偏上机器人，只选航班节点）胜率：${wins}/${N}`);
+}
+
+// ---------- 成长曲线：普通玩家按顺序打生涯，赚钱就升级，没三星会重打几次 ----------
+function progression() {
+  const skill = SKILLS[1];
+  const st = { coins: 0, upgrades: {}, stationLv: {}, gems: 0 };
+  const best = {};
+  const rows = [];
+  // 贪心：先买最便宜的、下一关用得到的设备升级，其次机舱装饰
+  function shop(c, l) {
+    for (;;) {
+      const opts = [];
+      const menu = SC.menuFor(c, Math.min(SC.LEVELS_PER_CITY - 1, l + 1));
+      for (const sid of SC.Flight.stationsForMenu(menu)) {
+        const lv = st.stationLv[sid] || 0;
+        const cost = SC.stationUpgradeCost(sid, lv);
+        if (cost != null) opts.push({ cost, buy: () => (st.stationLv[sid] = lv + 1) });
+      }
+      for (const u of SC.UPGRADES) {
+        const lv = st.upgrades[u.id] || 0;
+        if (lv < u.costs.length) opts.push({ cost: u.costs[lv] * 1.3, real: u.costs[lv], buy: () => (st.upgrades[u.id] = lv + 1) });
+      }
+      opts.sort((a, b) => a.cost - b.cost);
+      const o = opts[0];
+      if (!o || (o.real || o.cost) > st.coins) return;
+      st.coins -= o.real || o.cost;
+      o.buy();
+    }
+  }
+  for (let c = 0; c < SC.CITIES.length; c++) {
+    for (let l = 0; l < SC.LEVELS_PER_CITY; l++) {
+      const key = c + '-' + l;
+      let tries = 0;
+      let first = null;
+      do {
+        tries++;
+        const f = playFlight(SC.campaignFlight(c, l, st.upgrades, st.stationLv), skill[1], skill[2], skill[3], tries);
+        if (first == null) first = f.stars;
+        st.coins += f.coins;
+        if (f.stars > (best[key] || 0)) {
+          st.gems += f.stars - (best[key] || 0);
+          best[key] = f.stars;
+        }
+        shop(c, l);
+      } while ((best[key] || 0) < 3 && tries < 3);
+      const owned = Object.values(st.stationLv).reduce((a, b) => a + b, 0) + Object.values(st.upgrades).reduce((a, b) => a + b, 0);
+      rows.push(`${SC.CITIES[c].name}-${l + 1}`.padEnd(10) + `首次${first}★ 最终${best[key] || 0}★ 打了${tries}次`.padEnd(22) + `已升级${owned}项 余${st.coins}💰 💎${st.gems}`);
+    }
+  }
+  console.log('\n成长曲线（普通玩家，赚钱就升级，没三星最多打 3 次）');
+  for (const r of rows) console.log(r);
 }
 
 unitTests();

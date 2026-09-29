@@ -21,6 +21,8 @@
     autodrink: 0, // 自动送饮料间隔（秒），0 为关闭
     vipTip: 1, // 商务/贵宾小费倍率
     deliverHeal: 0.2, // 每送达一件恢复的耐心比例
+    stationLv: {}, // 生涯设备等级 { 设备id: 0~3 }
+    startFever: false, // 道具：开局狂热条满
   };
   SC.DEFAULT_MODS = DEFAULT_MODS;
 
@@ -41,9 +43,12 @@
       const stationIds = cfg.stations || Flight.stationsForMenu(this.menu);
       this.stations = stationIds.map((id) => {
         const def = SC.STATIONS[id];
-        const st = { id, def };
+        const lv = (this.mods.stationLv && this.mods.stationLv[id]) || 0;
+        const st = { id, def, lv };
         if (def.kind === 'cooker') {
-          const n = Math.max(1, this.mods.cookerSlots | 0);
+          st.speed = lv >= 1 ? 1.3 : 1; // 1 级：更快
+          st.burnK = lv >= 3 ? 2 : 1; // 3 级：保温翻倍
+          const n = Math.max(1, this.mods.cookerSlots | 0, lv >= 2 ? 2 : 1); // 2 级：双份
           st.slots = [];
           for (let i = 0; i < n; i++) st.slots.push({ state: 'idle', t: 0, burnT: 0, readyT: 0 });
         }
@@ -65,7 +70,7 @@
       this.freshDishes = 0;
       this.angry = 0;
       this.burnt = 0;
-      this.fever = 0;
+      this.fever = this.mods.startFever ? 100 : 0;
       this.feverT = 0;
       this.feverCount = 0;
       this.shield = this.mods.shield;
@@ -127,6 +132,25 @@
       let s = 0;
       for (let i = 0; i < 3; i++) if (this.coins >= t[i]) s = i + 1;
       return s;
+    }
+
+    // 设备放多久会烤焦（秒）；没有 burn 的设备返回 Infinity
+    burnLimit(st) {
+      return st.def.burn ? st.def.burn * this.mods.burnMult * (st.burnK || 1) : Infinity;
+    }
+
+    // 单道菜的实际售价：基础价 × 全局倍率 × (1 + 各部件设备升级加成的平均值)
+    recipePrice(id) {
+      const r = SC.RECIPES[id];
+      let bonus = 0;
+      const lvs = this.mods.stationLv || {};
+      for (const part of r.parts) {
+        const sid = SC.PART_SOURCE[part];
+        const kind = SC.STATIONS[sid].kind;
+        bonus += (lvs[sid] || 0) * (SC.STATION_PRICE_BONUS ? SC.STATION_PRICE_BONUS[kind] || 0 : 0);
+      }
+      bonus /= r.parts.length;
+      return r.price * this.mods.priceMult * (1 + bonus);
     }
 
     // ---------------- 菜谱匹配 ----------------
@@ -369,14 +393,15 @@
     complete(p) {
       const type = SC.PTYPES[p.type];
       const frac = SC.clamp(p.patience / p.maxPatience, 0, 1);
-      const freshValue = p.order.reduce((sum, o) => sum + (o.fresh ? SC.RECIPES[o.id].price : 0), 0);
+      const freshValue = p.order.reduce((sum, o) => sum + (o.fresh ? this.recipePrice(o.id) : 0), 0);
       const freshBonus = Math.round(freshValue * 0.12);
       let price = 0;
-      for (const o of p.order) price += SC.RECIPES[o.id].price;
-      price *= this.mods.priceMult;
+      for (const o of p.order) price += this.recipePrice(o.id);
       let tipMult = this.mods.tipMult * type.tip;
       if (p.type === 'business' || p.type === 'vip' || p.type === 'president') tipMult *= this.mods.vipTip;
-      const tip = price * 0.4 * frac * tipMult;
+      // 小费看“实际等了多久”（不受送餐回血影响），越快越多，拉开手速差距
+      const speed = SC.clamp(1 - (p.waitT || 0) / p.maxPatience, 0, 1);
+      const tip = price * 0.6 * Math.pow(speed, 1.5) * tipMult;
       if (frac >= 0.5) {
         this.combo++;
         this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -504,7 +529,7 @@
         if (!st.slots) continue;
         for (const s of st.slots) {
           if (s.state === 'cooking') {
-            s.t += dt * speed;
+            s.t += dt * speed * (st.speed || 1);
             if (s.t >= st.def.time) {
               s.state = 'ready';
               s.burnT = 0;
@@ -515,7 +540,7 @@
             s.readyT += dt;
             if (st.def.burn && !hold) {
               s.burnT += dt;
-              if (s.burnT >= st.def.burn * this.mods.burnMult) {
+              if (s.burnT >= this.burnLimit(st)) {
                 s.state = 'burnt';
                 this.burnt++;
                 this.emit('burn', { station: si });

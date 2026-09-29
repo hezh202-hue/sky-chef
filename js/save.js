@@ -5,8 +5,10 @@
 
   function fresh() {
     return {
-      v: 1,
+      v: 2,
       coins: 0,
+      gems: 0, // 星钻：首次拿星、解锁成就获得，用于关前道具
+      stationLv: {}, // 设备等级 { 设备id: 1~3 }
       stars: {}, // "c-l": 0..3
       best: {}, // "c-l": 最高金币
       upgrades: {},
@@ -31,11 +33,28 @@
           this.data = Object.assign(base, d);
           this.data.stats = Object.assign(fresh().stats, d.stats || {});
           this.data.settings = Object.assign(fresh().settings, d.settings || {});
+          if (!d.v || d.v < 2) this.migrateV2(d);
         }
       } catch (e) {
         this.data = fresh();
       }
       return this.data;
+    },
+    // v1 -> v2：全局升级改为按设备升级。旧的全局升级按原价退还金币，已有星星和成就补发星钻
+    migrateV2(old) {
+      const d = this.data;
+      let refund = 0;
+      for (const id in SC.LEGACY_UPGRADES) {
+        const lv = (d.upgrades && d.upgrades[id]) || 0;
+        for (let i = 0; i < lv; i++) refund += SC.LEGACY_UPGRADES[id][i] || 0;
+        if (d.upgrades) delete d.upgrades[id];
+      }
+      d.coins += refund;
+      d.gems = (d.gems || 0) + this.totalStars() + Object.keys(d.ach || {}).length * SC.GEMS_PER_ACH;
+      d.stationLv = d.stationLv || {};
+      d.v = 2;
+      this.migrationNote = { refund, gems: d.gems, fromVersion: old.v || 1 };
+      this.save();
     },
     save() {
       try {
@@ -71,9 +90,18 @@
     modesUnlocked() {
       return this.starsOf(0, 2) > 0;
     },
+    stationLevel(sid) {
+      return this.data.stationLv[sid] || 0;
+    },
+    // 设备所在关卡解锁后才能升级
+    stationUnlocked(sid) {
+      const [c, l] = SC.stationFirstLevel(sid);
+      return this.levelUnlocked(c, l);
+    },
     unlock(id) {
       if (this.data.ach[id]) return false;
       this.data.ach[id] = Date.now();
+      this.data.gems += SC.GEMS_PER_ACH;
       this.save();
       return true;
     },

@@ -22,7 +22,23 @@
     const menu = o.menu;
     const kidMenu = menu.filter((id) => SC.RECIPES[id].kid);
     const newest = o.featured || [];
+    // 波次登机：几位乘客扎堆登机（间隔约 1 秒），之后留出一段喘息时间。
+    // 平均登机速度不变，但有忙有闲，更考验先后顺序的判断。
+    const waveMax = o.wave || 1;
+    let groupLeft = 0;
+    let groupStart = t;
+    let groupSpan = 0;
     for (let i = 0; i < o.count; i++) {
+      if (waveMax > 1) {
+        if (groupLeft <= 0) {
+          if (i > 0) groupStart = Math.max(groupStart + groupSpan, t + 1.5);
+          groupSpan = 0;
+          t = groupStart;
+          groupLeft = rng.int(Math.min(2, waveMax), waveMax);
+        } else {
+          t += rng.range(0.7, 1.2);
+        }
+      }
       const type = rng.weighted(o.types);
       let n = rng.weighted(o.itemWeights);
       if (type === 'critic') n = Math.max(n, 2);
@@ -44,15 +60,23 @@
       const q = { t: Math.round(t * 10) / 10, type, order };
       if (o.sleepChance && rng() < o.sleepChance) q.sleep = rng.range(5, 12);
       list.push(q);
-      t += o.gap * rng.range(0.7, 1.3) * (1 + 0.35 * (n - 1));
+      // load 模式：按这位乘客点单的“工作量”安排下一位的到达时间，保证每关的忙碌程度可控
+      const g = o.load
+        ? (order.reduce((s, id) => s + SC.recipeWork(id), 0) / o.load) * rng.range(0.75, 1.25)
+        : o.gap * rng.range(0.7, 1.3) * (1 + 0.35 * (n - 1));
+      if (waveMax > 1) {
+        groupSpan += g;
+        groupLeft--;
+      } else t += g;
     }
     return list;
   }
 
-  function baseValue(passengers, priceMult) {
+  // 关卡基础价值：只按菜品原价计算，不受升级影响——升级让玩家更容易达标，而不是抬高目标
+  function baseValue(passengers) {
     let v = 0;
     for (const p of passengers) for (const id of p.order) v += SC.RECIPES[id].price;
-    return v * (priceMult || 1);
+    return v;
   }
 
   // 完美服务（满耐心小费 + 满连击）约为基础菜价的 2 倍
@@ -67,17 +91,17 @@
     return res.sort((a, b) => a.t - b.t);
   }
 
-  // 生涯升级 -> 引擎修正
-  SC.modsFromUpgrades = function (up) {
+  // 生涯升级（机舱装饰 + 设备等级）与关前道具 -> 引擎修正
+  SC.modsFromUpgrades = function (up, stationLv, boosters) {
     up = up || {};
+    boosters = boosters || [];
     return {
-      cookSpeed: 1 + 0.15 * (up.speed || 0),
-      burnMult: 1 + 0.4 * (up.burn || 0),
-      plates: 3 + (up.plates || 0),
-      patienceMult: 1 + 0.1 * (up.patience || 0),
-      priceMult: 1 + 0.1 * (up.price || 0),
+      plates: 3 + (up.plates || 0) + (boosters.includes('tray') ? 1 : 0),
+      patienceMult: (1 + 0.1 * (up.patience || 0)) * (boosters.includes('calm') ? 1.2 : 1),
+      tipMult: 1 + 0.2 * (up.tip || 0),
       feverGain: 1 + 0.25 * (up.fever || 0),
-      cookerSlots: 1 + (up.slots || 0),
+      stationLv: Object.assign({}, stationLv || {}),
+      startFever: boosters.includes('fever'),
     };
   };
 
@@ -88,8 +112,30 @@
     return menu;
   };
 
+  // 一道菜的工作量 ≈ 需要点几下：每个部件一下，烹饪设备多一下（开火 + 取出），组合菜再加一下（端盘）
+  SC.recipeWork = function (id) {
+    const r = SC.RECIPES[id];
+    let w = r.parts.length;
+    for (const p of r.parts) if (SC.STATIONS[SC.PART_SOURCE[p]].kind === 'cooker') w += 1;
+    if (r.parts.length > 1) w += 1;
+    return w;
+  };
+
+  // 生涯难度曲线：每秒需要完成的操作数，随进度平滑上升；每座新城市第 1 关稍微放松，留时间熟悉新菜
+  SC.campaignLoad = function (c, l) {
+    const d = c * SC.LEVELS_PER_CITY + l;
+    return 0.42 + 0.03 * d - (l === 0 && c > 0 ? 0.08 : 0);
+  };
+
+  // 每波最多几位乘客：前两关不扎堆，之后随进度逐渐变大
+  function waveSize(c, l) {
+    const d = c * SC.LEVELS_PER_CITY + l;
+    if (d < 2) return 1;
+    return Math.min(4, 2 + Math.floor(d / 8));
+  }
+
   // ---------- 生涯关卡 ----------
-  SC.campaignFlight = function (c, l, upgrades) {
+  SC.campaignFlight = function (c, l, upgrades, stationLv, boosters) {
     const city = SC.CITIES[c];
     const seed = 1000 + c * 100 + l;
     const rng = SC.rng(seed);
@@ -108,8 +154,10 @@
       menu,
       featured,
       gap,
+      load: SC.campaignLoad(c, l),
       itemWeights,
       types: typeWeights(c, l),
+      wave: waveSize(c, l),
     });
     if (c === 0 && l === 0) {
       // 教学关：手工编排，饮品交替出现、间隔宽松，保证第一次玩的人能顺利体验成功
@@ -128,8 +176,9 @@
     if (c === 0) turbCount = l >= 4 ? 1 : 0;
     else turbCount = l >= 1 ? 1 + (l >= 4 ? 1 : 0) : 0;
     const span = passengers[passengers.length - 1].t;
-    const mods = SC.modsFromUpgrades(upgrades);
-    const bv = baseValue(passengers, mods.priceMult);
+    const mods = SC.modsFromUpgrades(upgrades, stationLv, boosters);
+    const bv = baseValue(passengers);
+    const tuned = SC.CAMPAIGN_TARGETS && SC.CAMPAIGN_TARGETS[c + '-' + l];
     return {
       mode: 'campaign',
       city: c,
@@ -140,11 +189,11 @@
       menu,
       featured,
       passengers,
-      patience: Math.max(21, 30 - l * 1.1 - c * 1.3 + (l >= 4 ? 2 : 0)),
+      patience: Math.max(21, 30 - 0.36 * (c * SC.LEVELS_PER_CITY + l)),
       patiencePerItem: 9,
       turbulence: turbulenceTimes(rng, turbCount, span),
       mods,
-      targets: SC.targetsFor(bv),
+      targets: tuned ? tuned.slice() : SC.targetsFor(bv),
       baseValue: bv,
       tutorial: c === 0 && l === 0,
     };
@@ -216,7 +265,7 @@
     }
     const span = passengers[passengers.length - 1].t;
     const mods = SC.runMods(run);
-    const bv = baseValue(passengers, mods.priceMult);
+    const bv = baseValue(passengers);
     return {
       mode: 'run',
       city: c,
@@ -288,7 +337,7 @@
       mods.burnMult = 0.6;
     }
     const span = passengers[passengers.length - 1].t;
-    const bv = baseValue(passengers, 1);
+    const bv = baseValue(passengers);
     return {
       mode: 'daily',
       city: c,

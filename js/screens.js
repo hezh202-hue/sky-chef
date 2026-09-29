@@ -17,7 +17,7 @@
     );
   }
   function wallet() {
-    return h('div.wallet', h('span', '💰 ', h('b', Save.data.coins)), h('span', '⭐ ', h('b', Save.totalStars())));
+    return h('div.wallet', h('span', '💰 ', h('b', Save.data.coins)), h('span', '💎 ', h('b', Save.data.gems)), h('span', '⭐ ', h('b', Save.totalStars())));
   }
 
   // ======================= 标题 =======================
@@ -57,6 +57,15 @@
       h('div.footer-note', '点击 / 触屏游玩 · 键盘：数字键=设备  Q W E R=备餐盘  空格=狂热  Esc=暂停')
     );
     UI.setScreen(node);
+    if (Save.migrationNote && (Save.migrationNote.refund || Save.migrationNote.gems)) {
+      const m = Save.migrationNote;
+      Save.migrationNote = null;
+      UI.modal({
+        title: '🔧 升级系统更新',
+        body: `升级改为<b>按设备单独升级</b>：每台设备 3 级，烹饪设备还会变快、双份、不易烤焦。<br><br>旧的全局升级已按原价退还 <b>${m.refund} 💰</b>；根据你已拿到的星星和印章，补发 <b>${m.gems} 💎</b> 星钻，可在起飞前购买道具。`,
+        buttons: [{ label: '去看看', cls: 'primary', onClick: () => S.upgrades() }, { label: '稍后' }],
+      });
+    }
   };
 
   // ======================= 帮助 =======================
@@ -174,12 +183,47 @@
     }
     body.appendChild(path);
     const node = h('div.screen.campaign-screen', topBar('🧑‍🍳 生涯模式', S.title, wallet()), tabs, body,
-      h('div.campaign-foot', h('button.btn', { onclick: () => S.upgrades(() => S.campaign(c)) }, '🔧 厨房升级')));
+      h('div.campaign-foot', h('button.btn', { onclick: () => S.upgrades(() => S.campaign(c), c) }, '🔧 厨房升级')));
     UI.setScreen(node);
   };
 
   // 航班开场说明
-  function flightIntro(cfg, extra, onGo, onCancel) {
+  // 关前道具选择：返回 { node, selected }
+  function boosterPicker() {
+    const selected = [];
+    const gemsEl = h('b', Save.data.gems);
+    const spent = () => selected.reduce((sum, id) => sum + SC.BOOSTERS.find((b) => b.id === id).cost, 0);
+    const chips = SC.BOOSTERS.map((b) => {
+      const chip = h('button.booster', { title: b.desc }, h('span.bo-emoji', b.emoji), h('span.bo-name', b.name), h('small', b.desc), h('span.bo-cost', `💎 ${b.cost}`));
+      chip.addEventListener('click', () => {
+        const i = selected.indexOf(b.id);
+        if (i >= 0) selected.splice(i, 1);
+        else if (Save.data.gems - spent() >= b.cost) selected.push(b.id);
+        else {
+          UI.toast('星钻不够：每关首次拿到的每颗星 +1💎，解锁护照印章 +3💎', '💎');
+          return;
+        }
+        SC.Audio.play('click');
+        refresh();
+      });
+      return { b, chip };
+    });
+    function refresh() {
+      const left = Save.data.gems - spent();
+      gemsEl.textContent = left;
+      for (const { b, chip } of chips) {
+        const on = selected.includes(b.id);
+        chip.classList.toggle('on', on);
+        chip.classList.toggle('poor', !on && left < b.cost);
+      }
+    }
+    refresh();
+    const node = h('div.boosters', h('div.intro-sub', '关前道具（可选）', h('span.bo-wallet', '剩余 💎 ', gemsEl)), h('div.booster-row', chips.map((x) => x.chip)));
+    return { node, selected, spent };
+  }
+
+  function flightIntro(cfg, extra, onGo, onCancel, opt) {
+    const picker = opt && opt.boosters ? boosterPicker() : null;
     const newIds = cfg.featured || [];
     const list = h('div.menu-list');
     for (const id of cfg.menu) {
@@ -193,7 +237,8 @@
       cfg.targets ? h('div.targets', cfg.targets.map((t, i) => h('div.target', h('span', { html: UI.starsHtml(i + 1) }), h('b', t + ' 💰')))) : null,
       h('div.intro-meta', `👥 ${cfg.passengers.length} 位乘客`, cfg.turbulence.length ? ` · ⛈️ ${cfg.turbulence.length} 次颠簸` : ''),
       h('div.intro-sub', '本班菜单'),
-      list
+      list,
+      picker ? picker.node : null
     );
     UI.modal({
       title: cfg.title,
@@ -201,7 +246,7 @@
       body,
       buttons: [
         { label: '返回', onClick: onCancel },
-        { label: '🛫 起飞！', cls: 'primary', onClick: onGo },
+        { label: '🛫 起飞！', cls: 'primary', onClick: () => onGo(picker ? picker.selected.slice() : [], picker ? picker.spent() : 0) },
       ],
     });
   }
@@ -212,7 +257,8 @@
     const view = SC.GameView(cfg, {
       onEnd: (f) => onEnd(f),
       // 环球冒险中不允许重开（防止刷结果）
-      onRestart: isRun ? null : () => play(cfg, onEnd, onQuit, quitLabel),
+      // 重新开始不会再次免费获得关前道具
+      onRestart: isRun ? null : () => play(cfg.restartCfg || cfg, onEnd, onQuit, quitLabel),
       onQuit: () => onQuit(),
       quitLabel,
     });
@@ -253,8 +299,26 @@
   }
 
   // 结算建议：根据本局数据挑出最值得改进的 1~2 点，让玩家知道“下次怎么打得更好”
-  function adviceFor(f) {
+  // 生涯模式：本关用到的设备里，现在买得起的最便宜升级
+  function affordableUpgrade(cfg) {
+    if (!cfg || cfg.mode !== 'campaign') return null;
+    let best = null;
+    for (const sid of SC.Flight.stationsForMenu(cfg.menu)) {
+      const lv = Save.stationLevel(sid);
+      const cost = SC.stationUpgradeCost(sid, lv);
+      if (cost == null || cost > Save.data.coins) continue;
+      if (!best || cost < best.cost) best = { sid, lv, cost };
+    }
+    return best;
+  }
+
+  function adviceFor(f, cfg) {
     const tips = [];
+    const up = affordableUpgrade(cfg);
+    if (up) {
+      const def = SC.STATIONS[up.sid];
+      tips.push(['🔧', `你有 ${Save.data.coins} 金币，可以把【${def.name}】升到 ${up.lv + 1} 级（💰${up.cost}）：${SC.STATION_LEVELS[def.kind][up.lv].desc}。`]);
+    }
     if (f.burnt >= 2) tips.push(['💨', `烤焦了 ${f.burnt} 份。设备发红闪烁时要赶紧取出；暂时用不上的菜先别开火。`]);
     if (f.angry > 0) tips.push(['⏱️', `${f.angry} 位乘客等太久离开了。优先照顾耐心条变红的乘客；耗时长的菜（蒸、烤）提前开火。`]);
     if ((f.feverIdleT || 0) > 6) tips.push(['🔥', `狂热条满了 ${Math.round(f.feverIdleT)} 秒却没用。攒满就点，收入翻倍还能冻结耐心！`]);
@@ -264,15 +328,32 @@
     if (!tips.length) tips.push(['💸', '上菜越快小费越多：趁乘客耐心条还是绿色时送达，收入最高。']);
     return tips.slice(0, 2);
   }
-  function adviceBlock(f) {
-    const tips = adviceFor(f);
+  function adviceBlock(f, cfg) {
+    const tips = adviceFor(f, cfg);
     if (!tips.length) return null;
     return h('div.advice', h('div.advice-title', '💡 机长的建议'), tips.map(([e, t]) => h('div.advice-item', h('span', e), h('span', t))));
   }
 
   S.startCampaign = function (c, l) {
-    const cfg = SC.campaignFlight(c, l, Save.data.upgrades);
-    flightIntro(cfg, null, () => play(cfg, (f) => S.campaignResult(f, cfg), () => S.campaign(c)), () => {});
+    const make = (boosters) => SC.campaignFlight(c, l, Save.data.upgrades, Save.data.stationLv, boosters);
+    const cfg = make([]);
+    flightIntro(
+      cfg,
+      null,
+      (boosters, cost) => {
+        let run = cfg;
+        if (boosters.length) {
+          Save.data.gems -= cost;
+          Save.save();
+          run = make(boosters);
+          run.restartCfg = cfg;
+          run.boosters = boosters;
+        }
+        play(run, (f) => S.campaignResult(f, run), () => S.campaign(c));
+      },
+      () => {},
+      { boosters: cfg.level > 0 || cfg.city > 0 }
+    );
   };
 
   S.campaignResult = function (f, cfg) {
@@ -281,7 +362,9 @@
     const key = Save.key(c, l);
     const stars = f.stars;
     const prev = Save.data.stars[key] || 0;
+    const gemGain = Math.max(0, stars - prev); // 每颗首次拿到的星 +1 星钻
     if (stars > prev) Save.data.stars[key] = stars;
+    Save.data.gems += gemGain;
     Save.data.best[key] = Math.max(Save.data.best[key] || 0, f.coins);
     Save.data.coins += f.coins;
     Save.save();
@@ -309,47 +392,78 @@
     UI.modal({
       title: pass ? '🛬 航班顺利抵达！' : '😣 乘客们不太满意……',
       cls: 'result',
-      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), statsBlock(f), stars < 3 ? adviceBlock(f) : null, unlockNote),
+      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), gemGain ? h('div.gem-gain', `新拿到 ${gemGain} 颗星：+${gemGain} 💎`) : null, statsBlock(f), stars < 3 ? adviceBlock(f, cfg) : null, unlockNote),
       buttons: [
         { label: '地图', onClick: () => S.campaign(c) },
         { label: '重试', onClick: () => S.startCampaign(c, l) },
-        pass && hasNext ? { label: '下一班 →', cls: 'primary', onClick: () => { S.campaign(next[0]); S.startCampaign(next[0], next[1]); } } : { label: '🔧 升级厨房', cls: 'primary', onClick: () => S.upgrades(() => S.campaign(c)) },
-      ],
+        !pass || (stars < 3 && affordableUpgrade(cfg)) ? { label: '🔧 去升级', cls: pass ? '' : 'primary', onClick: () => S.upgrades(() => S.campaign(c), c) } : null,
+        pass && hasNext ? { label: '下一班 →', cls: 'primary', onClick: () => { S.campaign(next[0]); S.startCampaign(next[0], next[1]); } } : null,
+      ].filter(Boolean),
     });
   };
 
   // ======================= 升级 =======================
-  S.upgrades = function (back) {
+  // 标签页：每座已解锁城市一个“设备”页 + 一个“机舱装饰”页
+  S.upgrades = function (back, tab) {
     back = back || S.title;
     UI.setTheme('day');
+    const cities = SC.CITIES.map((_, i) => i).filter((i) => Save.cityUnlocked(i));
+    if (tab == null) tab = cities[cities.length - 1];
+    const go = (t) => { SC.Audio.play('click'); S.upgrades(back, t); };
+    const buy = (cost, apply, msg, emoji) => {
+      Save.data.coins -= cost;
+      apply();
+      Save.save();
+      SC.Audio.play('pay');
+      UI.toast(msg, emoji);
+      S.upgrades(back, tab);
+    };
+    const pips = (lv, max) => h('div.pips', Array.from({ length: max }, (_, i) => h('span.pip' + (i < lv ? '.on' : ''))));
+    const costBtn = (cost, lv, max, onBuy) => {
+      const canBuy = lv < max && Save.data.coins >= cost;
+      return h('button.btn.small' + (canBuy ? '.primary' : ''), { disabled: !canBuy, onclick: onBuy }, lv >= max ? '已满级' : `💰 ${cost}`);
+    };
+
+    const tabs = h('div.city-tabs.up-tabs');
+    for (const c of cities) {
+      const city = SC.CITIES[c];
+      tabs.appendChild(h('button.city-tab' + (tab === c ? '.active' : ''), { style: { '--city': city.color }, onclick: () => go(c) }, h('span.ct-flag', city.flag), h('span.ct-name', city.name), h('small', '设备')));
+    }
+    tabs.appendChild(h('button.city-tab' + (tab === 'cabin' ? '.active' : ''), { style: { '--city': '#8a6bff' }, onclick: () => go('cabin') }, h('span.ct-flag', '🛋️'), h('span.ct-name', '机舱'), h('small', '装饰')));
+
     const list = h('div.upgrade-list');
-    const render = () => {
-      list.innerHTML = '';
+    let note;
+    if (tab === 'cabin') {
+      note = '机舱装饰对所有城市的生涯航班生效。';
       for (const u of SC.UPGRADES) {
         const lv = Save.data.upgrades[u.id] || 0;
         const max = u.costs.length;
         const cost = u.costs[lv];
-        const pips = h('div.pips');
-        for (let i = 0; i < max; i++) pips.appendChild(h('span.pip' + (i < lv ? '.on' : '')));
-        const canBuy = lv < max && Save.data.coins >= cost;
-        list.appendChild(
-          h('div.upgrade-card', h('div.up-emoji', u.emoji), h('div.up-info', h('b', u.name), h('small', u.desc), pips),
-            h('button.btn.small' + (canBuy ? '.primary' : ''), {
-              disabled: !canBuy,
-              onclick: () => {
-                Save.data.coins -= cost;
-                Save.data.upgrades[u.id] = lv + 1;
-                Save.save();
-                SC.Audio.play('pay');
-                UI.toast(`${u.name} 升到 ${lv + 1} 级！`, u.emoji);
-                S.upgrades(back);
-              },
-            }, lv >= max ? '已满级' : `💰 ${cost}`))
-        );
+        list.appendChild(h('div.upgrade-card', h('div.up-emoji', u.emoji), h('div.up-info', h('b', u.name), h('small', u.desc + '（每级）'), pips(lv, max)),
+          costBtn(cost, lv, max, () => buy(cost, () => (Save.data.upgrades[u.id] = lv + 1), `${u.name} 升到 ${lv + 1} 级！`, u.emoji))));
       }
-    };
-    render();
-    UI.setScreen(h('div.screen.upgrade-screen', topBar('🔧 厨房升级', back, wallet()), h('p.screen-note', '升级在生涯模式中永久生效。金币来自每一班航班的收入。'), list));
+    } else {
+      note = '每台设备单独升级。组合菜的售价加成取各部件的平均值——把一道菜用到的设备都升级，才能拿满加成。';
+      const ids = Object.keys(SC.STATIONS).filter((sid) => SC.stationCity(sid) === tab);
+      for (const sid of ids) {
+        const def = SC.STATIONS[sid];
+        const lv = Save.stationLevel(sid);
+        const levels = SC.STATION_LEVELS[def.kind];
+        const max = levels.length;
+        const cost = SC.stationUpgradeCost(sid, lv);
+        const dishes = SC.dishesOfStation(sid).map((rid) => SC.RECIPES[rid].emoji).join(' ');
+        if (!Save.stationUnlocked(sid)) {
+          const [c, l] = SC.stationFirstLevel(sid);
+          list.appendChild(h('div.upgrade-card.locked', h('div.up-emoji', '🔒'), h('div.up-info', h('b', def.name), h('small', l > 0 ? `通关「${SC.CITIES[c].name} 第 ${l} 班」后解锁` : `解锁${SC.CITIES[c].name}后可升级`))));
+          continue;
+        }
+        const next = lv < max ? '下一级：' + levels[lv].desc : '全部升满！';
+        list.appendChild(h('div.upgrade-card' + (lv >= max ? '.maxed' : ''), h('div.up-emoji', def.emoji, lv ? h('span.up-lv', 'Lv' + lv) : null),
+          h('div.up-info', h('b', def.name, h('span.up-dishes', dishes)), h('small', next), pips(lv, max)),
+          costBtn(cost, lv, max, () => buy(cost, () => (Save.data.stationLv[sid] = lv + 1), `${def.name} 升到 ${lv + 1} 级！`, def.emoji))));
+      }
+    }
+    UI.setScreen(h('div.screen.upgrade-screen', topBar('🔧 厨房升级', back, wallet()), tabs, h('p.screen-note', note), list));
   };
 
   // ======================= 护照 =======================
