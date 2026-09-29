@@ -170,6 +170,99 @@
   ];
   SC.LEVELS_PER_CITY = 6;
 
+  // ---------- 城市 Boss 航班（每城第 6 班） ----------
+  // vip: Boss 乘客类型；rule: 本班特殊规则
+  SC.CITY_BOSS = [
+    { title: '首航典礼', vip: 'mayor', rule: null, desc: '市长亲自登机，点 3 道菜。他耐心比一般人长，但生气离开航班就失败。' },
+    { title: '华尔街包机', vip: 'tycoon', rule: 'business', desc: '满舱商务客：没耐心、小费高。大亨本人最急，千万别让他等。' },
+    { title: '米其林评审团', vip: 'judge', rule: 'critics', desc: '评论家扎堆登机，主评审压轴。好评奖金丰厚，差评扣钱。' },
+    { title: '樱花夜·红眼航班', vip: 'idol', rule: 'redeye', desc: '很多乘客先睡一觉再点单，记得准备毛毯。偶像也在机上！' },
+  ];
+
+  // ---------- 关卡挑战（🏅，每关一个，可选） ----------
+  // 每城 6 关各自的挑战类型；数量类挑战的目标值由 tests/calibrate.js 生成
+  SC.CITY_CHALLENGES = [
+    ['no_angry', 'fresh', 'no_burn', 'combo', 'no_trash', 'vip_happy'],
+    ['no_angry', 'fresh', 'combo', 'no_burn', 'fast', 'vip_happy'],
+    ['combo', 'no_burn', 'fast', 'fresh', 'no_trash', 'vip_happy'],
+    ['fast', 'combo', 'no_burn', 'fresh', 'no_angry', 'vip_happy'],
+  ];
+  // progress(f, n) -> { cur, done, failed }；failed 表示本局已不可能完成
+  SC.CHALLENGES = {
+    no_angry: { emoji: '😇', name: '零投诉', desc: () => '没有乘客生气离开', progress: (f) => ({ cur: f.angry, done: f.done && !f.failed && f.angry === 0, failed: f.angry > 0 }) },
+    no_burn: { emoji: '🧯', name: '零烤焦', desc: () => '一份食物都不烤焦', progress: (f) => ({ cur: f.burnt, done: f.done && !f.failed && f.burnt === 0, failed: f.burnt > 0 }) },
+    no_trash: { emoji: '♻️', name: '零浪费', desc: () => '不倒掉盘子、不烤焦食物', progress: (f) => ({ cur: f.discards + f.burnt, done: f.done && !f.failed && f.discards + f.burnt === 0, failed: f.discards + f.burnt > 0 }) },
+    combo: { emoji: '🔗', name: '连击达人', desc: (n) => `连击达到 ${n}`, progress: (f, n) => ({ cur: f.maxCombo, done: f.maxCombo >= n, failed: false }) },
+    fresh: { emoji: '♨️', name: '趁热上桌', desc: (n) => `趁热上桌 ${n} 次`, progress: (f, n) => ({ cur: f.freshDishes, done: f.freshDishes >= n, failed: false }) },
+    fast: { emoji: '⚡', name: '闪电服务', desc: (n) => `${n} 位乘客在耐心还很足时就吃上`, progress: (f, n) => ({ cur: f.fastServed, done: f.fastServed >= n, failed: false }) },
+    vip_happy: { emoji: '👑', name: '贵宾满意', desc: () => 'Boss 乘客心满意足地离开（耐心过半）', progress: (f) => ({ cur: f.bossMood == null ? 0 : 1, done: f.bossMood != null && f.bossMood >= 0.5, failed: f.bossFailed || (f.bossMood != null && f.bossMood < 0.5) }) },
+  };
+  SC.CHALLENGE_GEMS = 2; // 首次完成挑战奖励的星钻
+
+  // ---------- 剧情对话 ----------
+  // who: 角色 id；key: city-<c>-start / city-<c>-boss / city-<c>-clear
+  SC.CAST = {
+    captain: { name: '周机长', face: '🧑‍✈️' },
+    purser: { name: '林乘务长', face: '👩‍✈️' },
+    pierre: { name: '皮埃尔', face: '👨‍🍳' },
+    mayor: { name: '市长', face: '👨‍💼' },
+    tycoon: { name: '大亨', face: '🤵' },
+    judge: { name: '主评审', face: '🧐' },
+    idol: { name: '偶像', face: '👩‍🎤' },
+  };
+  SC.STORY = {
+    'city-0-start': [
+      ['captain', '欢迎加入东方明珠号！我是机长老周。别紧张，第一班只有几位乘客。'],
+      ['purser', '我是乘务长小林。厨房里有不懂的尽管问，我会在旁边提醒你。'],
+      ['captain', '月底市长要坐我们的首航典礼航班……这段时间好好练手艺吧！'],
+    ],
+    'city-0-boss': [
+      ['purser', '今天就是首航典礼！市长点了三道菜，他很有耐心，但要是让他生气离开……'],
+      ['captain', '……这条航线就要被取消了。稳住，你可以的！'],
+    ],
+    'city-0-clear': [
+      ['mayor', '这小笼包很地道！年轻人，你的手艺应该让全世界尝尝。'],
+      ['captain', '好消息：公司把你调去纽约航线了！收拾行李吧。'],
+    ],
+    'city-1-start': [
+      ['purser', '纽约的乘客节奏快。商务客没耐心，但小费给得大方。'],
+      ['captain', '汉堡要先用面包篮起盘，再放肉饼。芝士、生菜都是一层层叠上去的。'],
+    ],
+    'city-1-boss': [
+      ['purser', '华尔街的大亨包下了整架飞机，满舱都是商务客。'],
+      ['captain', '大亨本人最急。先照顾他，再照顾其他人！'],
+    ],
+    'city-1-clear': [
+      ['tycoon', '效率惊人！我在巴黎有家餐厅正缺主厨……开玩笑的。'],
+      ['captain', '下一站巴黎。听说那边有位很傲慢的明星主厨。'],
+    ],
+    'city-2-start': [
+      ['pierre', '哦？这就是那位"云端大厨"？在巴黎，飞机餐可不是填饱肚子就行的。'],
+      ['purser', '别理他。巴黎评论家多，上菜快他们会给好评奖金。'],
+    ],
+    'city-2-boss': [
+      ['pierre', '米其林评审团今天坐你的航班。我倒要看看你能不能让他们满意。'],
+      ['purser', '评论家至少点两道菜。组合菜提前备好，别手忙脚乱。'],
+    ],
+    'city-2-clear': [
+      ['judge', '牛排火候完美。这是我今年在三万英尺高空吃过最好的一餐。'],
+      ['pierre', '……哼。东京见。'],
+    ],
+    'city-3-start': [
+      ['captain', '东京航线大多是夜航，寿司和拉面是这里的招牌。'],
+      ['purser', '拉面要先起碗，豪华拉面还得加溏心蛋。天妇罗容易焦，盯紧点。'],
+    ],
+    'city-3-boss': [
+      ['purser', '今晚的红眼航班，超人气偶像也在机上！很多乘客会先睡一觉，醒来再点单。'],
+      ['captain', '毛毯从行李柜拿。别吵醒睡着的乘客就行。'],
+    ],
+    'city-3-clear': [
+      ['idol', '谢谢你的拉面！下次演唱会给你留前排！'],
+      ['pierre', '……好吧，我承认。你才是真正的云端大厨。'],
+      ['captain', '四座城市全部通关！接下来去环球冒险，挑战总统专机吧。'],
+    ],
+  };
+
   // ---------- 乘客类型 ----------
   SC.PTYPES = {
     normal: {
@@ -184,7 +277,12 @@
     influencer: { name: '网红', faces: ['🧑‍🎤', '💃'], patience: 0.8, tip: 1.2, badge: '📱', desc: '快速服务后开直播好评，全舱乘客耐心回升。' },
     critic: { name: '美食评论家', faces: ['🧐'], patience: 1.1, tip: 1.2, badge: '📝', desc: '点单多；满意时给出好评奖金，差评则扣钱。' },
     vip: { name: '贵宾', faces: ['🤴', '👸'], patience: 0.9, tip: 2.5, badge: '👑', desc: '头等舱贵宾，小费惊人。' },
-    president: { name: '总统', faces: ['🕴️'], patience: 1, tip: 3, badge: '🎩', desc: '专机的主人。怠慢他，一切都完了。' },
+    president: { name: '总统', faces: ['🕴️'], patience: 1, tip: 3, badge: '🎩', boss: true, desc: '专机的主人。怠慢他，一切都完了。' },
+    // 生涯城市 Boss：生气离开则航班失败
+    mayor: { name: '市长', faces: ['👨‍💼'], patience: 1, tip: 2.5, badge: '🎖️', boss: true, desc: '首航典礼的主宾。让他满意，航线就稳了。' },
+    tycoon: { name: '华尔街大亨', faces: ['🤵'], patience: 0.75, tip: 3, badge: '💎', boss: true, desc: '包下整架飞机的大亨，时间就是金钱。' },
+    judge: { name: '米其林主评审', faces: ['🧐'], patience: 1.1, tip: 2.5, badge: '⭐', boss: true, desc: '一顿饭决定你在巴黎的名声。' },
+    idol: { name: '超人气偶像', faces: ['👩‍🎤'], patience: 0.9, tip: 2.5, badge: '🎤', boss: true, desc: '红眼航班上的大明星，粉丝都在看着。' },
   };
 
   // ---------- 设备升级（生涯模式，按设备单独升级，金币购买） ----------
@@ -273,5 +371,8 @@
     { id: 'run_perfect', emoji: '💎', name: '零失误环球', desc: '满口碑完成环球冒险' },
     { id: 'daily', emoji: '📅', name: '每日一飞', desc: '完成一次每日航班' },
     { id: 'all_cities', emoji: '✈️', name: '环游世界', desc: '通关全部四座城市' },
+    { id: 'medal1', emoji: '🏅', name: '初试身手', desc: '完成第一个关卡挑战' },
+    { id: 'medal12', emoji: '🎖️', name: '挑战达人', desc: '完成 12 个关卡挑战' },
+    { id: 'boss4', emoji: '👑', name: '贵宾专属', desc: '让四座城市的 Boss 乘客都满意离开' },
   ];
 })(typeof window !== 'undefined' ? window : globalThis);

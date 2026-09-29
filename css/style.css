@@ -2626,3 +2626,167 @@ button:disabled {
 .up-info {
   min-width: 0;
 }
+
+/* ---------- 第三阶段：剧情对话 / 关卡挑战 / Boss ---------- */
+.dlg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: linear-gradient(180deg, rgba(15, 20, 45, 0.15), rgba(15, 20, 45, 0.6));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  cursor: pointer;
+}
+.dlg-box {
+  position: relative;
+  width: min(560px, 100%);
+  background: var(--paper);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(10, 20, 60, 0.35);
+  padding: 16px 16px 26px 88px;
+  min-height: 108px;
+}
+.dlg-box.right {
+  padding: 16px 88px 26px 16px;
+}
+.dlg-box.pop {
+  animation: dlg-pop 0.22s ease-out;
+}
+@keyframes dlg-pop {
+  from {
+    transform: translateY(10px);
+    opacity: 0.6;
+  }
+}
+.dlg-face {
+  position: absolute;
+  left: 12px;
+  top: -22px;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--gold);
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  box-shadow: var(--shadow);
+}
+.dlg-box.right .dlg-face {
+  left: auto;
+  right: 12px;
+  border-color: var(--accent);
+}
+.dlg-name {
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.dlg-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.dlg-next {
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  animation: dlg-blink 1.2s ease-in-out infinite;
+}
+@keyframes dlg-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.dlg-box.right .dlg-next {
+  right: auto;
+  left: 16px;
+}
+.hud-challenge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #8a5a00;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-challenge.done {
+  background: #dcf7e6;
+  color: #177a3e;
+}
+.hud-challenge.failed {
+  background: #eceef3;
+  color: #8a8fa3;
+  text-decoration: line-through;
+}
+.pax.boss .avatar {
+  filter: drop-shadow(0 0 6px rgba(255, 194, 51, 0.95));
+}
+.pax.boss .face {
+  animation: boss-bob 1.4s ease-in-out infinite;
+}
+@keyframes boss-bob {
+  50% {
+    transform: translateY(-3px) scale(1.06);
+  }
+}
+.pax.boss .bubble {
+  border: 2px solid var(--gold);
+}
+.level-node .ln-medal {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 16px;
+}
+.level-node .ln-medal.off {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.level-node.boss-node {
+  background: linear-gradient(180deg, #fff7df, #ffe7b0);
+}
+.intro-challenge,
+.boss-intro {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: 14px;
+}
+.intro-challenge {
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+}
+.intro-challenge.done {
+  background: #e9f9ef;
+  border-color: #9fe0b7;
+}
+.boss-intro {
+  background: linear-gradient(90deg, #fff1c9, #ffe0d4);
+  font-weight: 700;
+  color: #7a3a12;
+}
+.challenge-result {
+  margin-top: 8px;
+  font-weight: 800;
+}
+.challenge-result.done {
+  color: #177a3e;
+}
+.challenge-result.miss {
+  color: var(--muted);
+}
+.level-node {
+  position: relative;
+}
