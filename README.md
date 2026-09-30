@@ -95,9 +95,9 @@ sky-chef/
 
 独立仓库： https://github.com/hezh202-hue/sky-chef
 
-在 Releases 下载 `sky-chef-1.0.0.apk`，传到 Android 手机后点击安装，按系统提示允许当前浏览器或文件管理器安装应用。
+在 Releases 下载 `sky-chef-1.1.0.apk`，传到 Android 手机后点击安装，按系统提示允许当前浏览器或文件管理器安装应用。
 
-- 应用名：云端大厨；包名：`com.hezh202.skychef`；版本：1.0.0。
+- 应用名：云端大厨；包名：`com.hezh202.skychef`；版本：1.1.0。
 - 最低 Android 6.0；目标 Android 15；使用系统 Android System WebView。
 - 游戏资源内置，无网络权限，无广告、账号或服务器。字体使用系统回退字体。
 - 已完成关卡的星级、金币、升级保存在本机。切后台会暂停；航班中按返回键暂停，主菜单按返回键确认退出。
@@ -128,7 +128,7 @@ Android 外壳按 [Android 官方本地内容加载方案](https://developer.and
 下载 Actions 产物后，也可以仅用 Android SDK Build-Tools 在 Windows 本机签名：
 
 ```powershell
-.\scripts\Sign-Apk.ps1 -UnsignedApk .\sky-chef-1.0.0-unsigned.apk -OutputApk .\sky-chef-1.0.0.apk -BuildTools 'C:\Android\Sdk\build-tools\35.0.0' -Keystore 'D:\private\sky-chef.jks' -PasswordFile 'D:\private\password.txt'
+.\scripts\Sign-Apk.ps1 -UnsignedApk .\sky-chef-1.1.0-unsigned.apk -OutputApk .\sky-chef-1.1.0.apk -BuildTools 'C:\Android\Sdk\build-tools\35.0.0' -Keystore 'D:\private\sky-chef.jks' -PasswordFile 'D:\private\password.txt'
 ```
 
 脚本先检查 APK 对齐，再签名并验证证书，最后打印 SHA-256。密码通过文件读取，不放在命令参数或日志中。签名后再上传 APK 到 Releases；不要上传密钥或密码文件。
