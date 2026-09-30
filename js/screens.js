@@ -125,6 +125,7 @@
         'div.settings',
         toggle('音效', 'sfx', (v) => (SC.Audio.sfxOn = v)),
         toggle('背景音乐', 'music', (v) => SC.Audio.setMusic(v)),
+        typeof navigator !== 'undefined' && navigator.vibrate ? toggle('震动反馈', 'vibrate', (v) => v && UI.buzz(30)) : null,
         h('button.btn.danger.small', {
           onclick: () => {
             UI.modal({
@@ -398,7 +399,9 @@
     const gemGain = Math.max(0, stars - prev); // 每颗首次拿到的星 +1 星钻
     if (stars > prev) Save.data.stars[key] = stars;
     Save.data.gems += gemGain;
-    Save.data.best[key] = Math.max(Save.data.best[key] || 0, f.coins);
+    const prevBest = Save.data.best[key] || 0;
+    const newRecord = prevBest > 0 && f.coins > prevBest; // 第一次打不算“新纪录”
+    Save.data.best[key] = Math.max(prevBest, f.coins);
     Save.data.coins += f.coins;
     Save.save();
     recordCommon(f);
@@ -438,15 +441,28 @@
     for (let i = 0; i < 3; i++) {
       const s = h('span.big-star', '★');
       starEl.appendChild(s);
-      if (i < stars) setTimeout(() => { s.classList.add('on'); SC.Audio.play('star'); }, 350 + i * 380);
+      if (i < stars) {
+        setTimeout(() => {
+          s.classList.add('on');
+          SC.Audio.play('star');
+          SC.UI.buzz(20);
+          // 三星：最后一颗星落下时撒一圈闪光
+          if (i === 2 && s.isConnected) {
+            const r = s.getBoundingClientRect();
+            SC.UI.burst(r.left + r.width / 2, r.top + r.height / 2, ['✨', '⭐', '🌟'], 10);
+          }
+        }, 350 + i * 380);
+      }
     }
+    const coinsEl = h('div.result-coins', `💰 ${f.coins}`);
+    const recordEl = newRecord ? h('div.new-record', `🏆 新纪录！（之前 ${prevBest}）`) : null;
     let unlockNote = null;
     if (pass && l === 2 && c === 0 && prev === 0) unlockNote = h('div.unlock-note', '🎉 解锁新模式：🌍 环球冒险 与 📅 每日航班！');
     if (pass && l === SC.LEVELS_PER_CITY - 1 && prev === 0 && c + 1 < SC.CITIES.length) unlockNote = h('div.unlock-note', `🎉 解锁新城市：${SC.CITIES[c + 1].flag} ${SC.CITIES[c + 1].name}！`);
     const showResult = () => UI.modal({
       title: pass ? '🛬 航班顺利抵达！' : f.bossFailed ? `😣 ${bossName}生气离开了……` : '😣 乘客们不太满意……',
       cls: 'result',
-      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : f.bossFailed ? `${bossName}离开了，本班不计星——下次先照顾好他` : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), gemGain ? h('div.gem-gain', `新拿到 ${gemGain} 颗星：+${gemGain} 💎`) : null, chLine, statsBlock(f), stars < 3 ? adviceBlock(f, cfg) : null, unlockNote),
+      body: h('div', starEl, coinsEl, recordEl, h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : f.bossFailed ? `${bossName}离开了，本班不计星——下次先照顾好他` : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), gemGain ? h('div.gem-gain', `新拿到 ${gemGain} 颗星：+${gemGain} 💎`) : null, chLine, statsBlock(f), stars < 3 ? adviceBlock(f, cfg) : null, unlockNote),
       buttons: [
         { label: '地图', onClick: () => S.campaign(c) },
         { label: '重试', onClick: () => S.startCampaign(c, l) },
@@ -455,8 +471,12 @@
       ].filter(Boolean),
     });
     // 第一次打赢城市 Boss：先播放通关剧情
-    if (pass && cfg.cityBoss && prev === 0) story(`city-${c}-clear`, showResult);
-    else showResult();
+    const reveal = () => {
+      showResult();
+      SC.UI.countUp(coinsEl, f.coins, (v) => `💰 ${v}`);
+    };
+    if (pass && cfg.cityBoss && prev === 0) story(`city-${c}-clear`, reveal);
+    else reveal();
   };
 
   // ======================= 升级 =======================

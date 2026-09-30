@@ -69,7 +69,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(f);
     f.connect(g);
-    g.connect(sfxGain);
+    g.connect(opt.out || sfxGain);
     src.start(t0);
     src.stop(t0 + dur + 0.05);
   }
@@ -164,6 +164,25 @@
     }
   }
 
+  // ---------- 狂热变奏：在背景音乐上叠一层快节奏琶音 + 踩镲 ----------
+  const FEVER_ARP = [0, 2, 4, 7, 4, 2, 5, 7];
+  let feverTimer = null;
+  let feverStep = 0;
+  let feverNext = 0;
+  function scheduleFever() {
+    if (!ctx) return;
+    const s16 = 60 / 150 / 4; // 150 BPM 的十六分音符
+    while (feverNext < ctx.currentTime + 0.2) {
+      const delay = feverNext - ctx.currentTime;
+      const m = FEVER_ARP[feverStep % FEVER_ARP.length] + (Math.floor(feverStep / 16) % 2 ? 1 : 0);
+      tone(SCALE[m % SCALE.length], s16 * 0.9, { type: 'square', vol: 0.14, delay, out: musicGain });
+      if (feverStep % 2 === 1) noise(0.04, { filter: 'highpass', freq: 7000, vol: 0.25, attack: 0.005, delay, out: musicGain });
+      if (feverStep % 4 === 0) tone(SCALE[0] / 4, s16 * 2, { type: 'triangle', vol: 0.4, delay, out: musicGain });
+      feverNext += s16;
+      feverStep++;
+    }
+  }
+
   function startSynthMusic() {
     if (!ctx) return;
     nextTime = ctx.currentTime + 0.1;
@@ -206,7 +225,19 @@
         }
       } else startSynthMusic();
     },
+    // 狂热期间叠加变奏；只在音乐开启时播放，暂停/结束时由航班画面关掉
+    setFever(on) {
+      if (on && this.musicOn && !feverTimer && ensure()) {
+        feverStep = 0;
+        feverNext = ctx.currentTime + 0.05;
+        feverTimer = setInterval(scheduleFever, 60);
+      } else if (!on && feverTimer) {
+        clearInterval(feverTimer);
+        feverTimer = null;
+      }
+    },
     stopMusic() {
+      this.setFever(false);
       if (musicTimer && musicTimer !== 'track') clearInterval(musicTimer);
       if (musicTrack) musicTrack.pause();
       musicTimer = null;
