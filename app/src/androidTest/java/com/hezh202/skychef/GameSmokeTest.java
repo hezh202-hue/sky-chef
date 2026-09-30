@@ -79,7 +79,8 @@ public class GameSmokeTest {
         CountDownLatch idle = new CountDownLatch(1);
         InstrumentationRegistry.getInstrumentation().waitForIdle(idle::countDown);
         idle.await(10, TimeUnit.SECONDS);
-        SystemClock.sleep(700);
+        // 软件渲染的模拟器上画面上屏比 JS 状态慢，等 2 秒，否则会拍到切换前的旧画面
+        SystemClock.sleep(2000);
         onUi(() -> {
             WebView web = activity.getGameWebView();
             int[] location = new int[2];
