@@ -15,7 +15,7 @@
       upgrades: {},
       ach: {},
       stats: { served: 0, coinsTotal: 0, burnt: 0, flights: 0, runsWon: 0, runsPlayed: 0 },
-      settings: { sfx: true, music: true },
+      settings: { sfx: true, music: true, vibrate: true },
       daily: {}, // dateKey: 最高分
       run: null, // 进行中的环球冒险
       bestRun: 0,

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 烤焦、乘客生气、狂热时的震动反馈（普通权限，安装时自动授予，不弹窗） -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application android:label="云端大厨" android:icon="@drawable/ic_launcher"
         android:allowBackup="false" android:usesCleartextTraffic="false"
         android:supportsRtl="true" android:theme="@style/AppTheme">

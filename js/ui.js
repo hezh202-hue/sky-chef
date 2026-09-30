@@ -169,6 +169,38 @@
       show();
     },
 
+    // 手机震动反馈（设置里可关）；浏览器不支持或还没交互过时静默忽略
+    buzz(pattern) {
+      if (!SC.Save.data.settings.vibrate || typeof navigator === 'undefined' || !navigator.vibrate) return;
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {
+        /* 忽略 */
+      }
+    },
+
+    // 数字从 0 滚动到目标值，每隔几步“叮”一声
+    countUp(el, to, fmt, dur) {
+      dur = dur || 900;
+      const t0 = performance.now();
+      let lastTick = 0;
+      const step = (now) => {
+        if (!el.isConnected && now - t0 > 50) return;
+        const k = Math.min(1, (now - t0) / dur);
+        const v = Math.round(to * (1 - Math.pow(1 - k, 3)));
+        el.textContent = fmt(v);
+        if (k < 1) {
+          if (now - lastTick > 90) {
+            SC.Audio.play('coin');
+            lastTick = now;
+          }
+          requestAnimationFrame(step);
+        }
+      };
+      el.textContent = fmt(0);
+      requestAnimationFrame(step);
+    },
+
     // 在屏幕坐标处飘字
     floatText(x, y, text, cls) {
       const el = h('div.float-text' + (cls ? '.' + cls : ''), text);

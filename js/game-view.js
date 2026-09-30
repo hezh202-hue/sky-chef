@@ -92,7 +92,26 @@
       windowsTop.appendChild(h('span.window'));
       windowsBot.appendChild(h('span.window'));
     }
-    const cabin = h('div.cabin', windowsTop, seatsEl, windowsBot, seatbeltSign);
+    const cabin = h('div.cabin.sky-' + (cfg.theme || 'day'), windowsTop, seatsEl, windowsBot, seatbeltSign);
+    // 舷窗外的风景：出发城市 → 云海 → 目的地城市
+    const scenery = SC.Scenery([...windowsTop.children, ...windowsBot.children], from, to, cfg.theme || 'day');
+    // 空乘：在过道里走到乘客那一列送餐（纯表现，不影响玩法节奏）
+    const crew = h('div.crew', h('div.crew-hat'), h('div.crew-head'), h('div.crew-body'), h('div.crew-tray'));
+    seatsEl.appendChild(crew);
+    let crewX = 16; // 起始站在过道最左端（再往左会被机舱边缘挡住）
+    crew.style.transform = `translateX(${crewX}px)`;
+    let crewTimer = null;
+    function crewServe(seatEl) {
+      const x = seatEl.offsetLeft + seatEl.offsetWidth / 2;
+      crew.classList.toggle('face-left', x < crewX);
+      crewX = x;
+      crew.style.transform = `translateX(${Math.round(x)}px)`;
+      crew.classList.remove('serve');
+      void crew.offsetWidth;
+      crew.classList.add('serve', 'walk');
+      clearTimeout(crewTimer);
+      crewTimer = setTimeout(() => crew.classList.remove('walk'), 300);
+    }
 
     // 厨房
     const platesEl = h('div.plates');
@@ -168,6 +187,7 @@
     let lastCoins = 0;
     let lastCombo = 0;
     let bannerTimer = null;
+    let feverMusicOn = false;
 
     function act(fn) {
       if (paused || ended) return;
@@ -465,6 +485,15 @@
             const src = e.station != null ? refs.stations[e.station].el : e.plate != null ? refs.plates[e.plate].el : feverBtn;
             SC.UI.fly(SC.RECIPES[e.recipe].emoji, src, seatEl);
             SC.Audio.play('deliver');
+            if (seatEl) {
+              crewServe(seatEl);
+              const px = refs.seats[e.seat].pax;
+              if (px) {
+                px.el.classList.remove('eat');
+                void px.el.offsetWidth;
+                px.el.classList.add('eat');
+              }
+            }
             if (e.fresh) {
               const [x, y] = center(seatEl);
               SC.UI.floatText(x, y - 56, '趁热上桌！', 'fresh');
@@ -494,7 +523,10 @@
             if (e.combo >= 3 && e.combo % 1 === 0) {
               const [cx, cy] = center(cabin);
               SC.UI.floatText(cx, cy, `连击 ×${e.combo}!`, 'combo');
-              if (e.combo % 5 === 0) SC.Audio.play('combo');
+              if (e.combo % 5 === 0) {
+                SC.Audio.play('combo');
+                SC.UI.buzz(25);
+              }
             }
             if (e.ptype === 'critic' && e.note === '好评！') SC.UI.achieve('critic');
             break;
@@ -503,6 +535,7 @@
             const [x, y] = center(refs.seats[e.seat].el);
             SC.UI.floatText(x, y - 20, e.shielded ? '🛡️ 已抵消' : cfg.repLimit != null && isFinite(cfg.repLimit) ? '💔 口碑 -1' : '😡 生气离开', 'bad');
             SC.Audio.play('angry');
+            SC.UI.buzz([70, 50, 70]);
             refs.seats[e.seat].el.classList.add('shake');
             setTimeout(() => refs.seats[e.seat].el.classList.remove('shake'), 500);
             break;
@@ -546,6 +579,7 @@
             SC.UI.burst(x, y, ['💨', '🔥'], 5);
             SC.UI.floatText(x, y - 30, '烤焦了！', 'bad');
             SC.Audio.play('burn');
+            SC.UI.buzz(60);
             break;
           }
           case 'trash':
@@ -558,6 +592,7 @@
               const t = SC.PTYPES[bp.type];
               showBanner(`${t.badge} ${t.name}登机了！优先照顾`, 'fever', 2600);
               SC.Audio.play('fever');
+              SC.UI.buzz(100);
             }
             break;
           }
@@ -589,6 +624,7 @@
             showBanner('🔥 狂热时间！收入翻倍 · 耐心冻结 · 烹饪加速', 'fever', 2500);
             SC.Audio.play('fever');
             SC.Audio.setTempo(140);
+            SC.UI.buzz([40, 40, 120]);
             const [x, y] = center(feverBtn);
             SC.UI.burst(x, y, ['🔥', '⭐', '✨'], 12);
             break;
@@ -617,6 +653,12 @@
       renderStations();
       renderPlates();
       renderHud();
+      scenery.update(f.progress);
+      const feverMusic = f.feverActive && !paused && !ended;
+      if (feverMusic !== feverMusicOn) {
+        SC.Audio.setFever(feverMusic);
+        feverMusicOn = feverMusic;
+      }
     }
 
     function onEnd() {
@@ -699,6 +741,10 @@
       void el.offsetWidth;
       el.classList.add('pressed');
     }
+    function onResize() {
+      tutFinger();
+      scenery.layout();
+    }
     function onVis() {
       if (document.hidden) pause();
     }
@@ -715,7 +761,9 @@
         }
         document.addEventListener('keydown', onKey);
         document.addEventListener('visibilitychange', onVis);
-        root.addEventListener('resize', tutFinger);
+        root.addEventListener('resize', onResize);
+        scenery.layout(); // 画面已挂到页面上，先同步对齐；字体等加载完后下一帧再校准一次
+        requestAnimationFrame(() => scenery.layout());
         raf = requestAnimationFrame(frame);
       },
       destroy() {
@@ -724,7 +772,9 @@
         clearTimeout(bannerTimer);
         document.removeEventListener('keydown', onKey);
         document.removeEventListener('visibilitychange', onVis);
-        root.removeEventListener('resize', tutFinger);
+        root.removeEventListener('resize', onResize);
+        clearTimeout(crewTimer);
+        SC.Audio.setFever(false);
         SC.Audio.setTempo(108);
       },
       get events() {

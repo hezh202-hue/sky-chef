@@ -2791,3 +2791,206 @@ button:disabled {
 .level-node {
   position: relative;
 }
+
+/* ---------- 第四阶段：表现力（舷窗风景 / 空乘 / 乘客反应 / 结算） ---------- */
+/* 舷窗：每个窗口露出同一幅连续全景的一段 */
+.game .window {
+  position: relative;
+  overflow: hidden;
+  width: 34px;
+  height: 22px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #5fb4ff, #d8f0ff);
+}
+.game .window::after {
+  /* 窗框画在全景之上 */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px rgba(102, 140, 183, 0.4), inset 0 3px 5px rgba(20, 30, 70, 0.18);
+  pointer-events: none;
+}
+.game .cabin.sky-dawn .window {
+  background: linear-gradient(180deg, #ff9a8b, #ffe8c7);
+}
+.game .cabin.sky-sunset .window {
+  background: linear-gradient(180deg, #5b3a8c, #c65fd3 55%, #ffa27a);
+}
+.game .cabin.sky-night .window {
+  background: radial-gradient(1px 1px at 30% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 55%, #fff, transparent),
+    linear-gradient(180deg, #0b1030, #3a3f78);
+}
+.game .cabin.sky-storm .window {
+  background: linear-gradient(180deg, #3b4252, #8a95a8);
+}
+.pano {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+}
+.pano-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+}
+.pano-layer.city {
+  background-size: auto 100%;
+  background-position: left bottom;
+  transition: transform 1.2s linear;
+}
+.pano-layer.arr {
+  transform: translateY(105%);
+}
+.pano-layer.clouds {
+  background-size: 120px 100%;
+  animation: pano-drift 16s linear infinite;
+}
+@keyframes pano-drift {
+  to {
+    background-position-x: -120px;
+  }
+}
+@media (max-width: 420px) {
+  .game .window {
+    width: 28px;
+    height: 19px;
+    border-radius: 8px;
+  }
+}
+@media (max-height: 700px) and (min-width: 761px) {
+  .game .window {
+    height: 16px;
+  }
+}
+
+/* 空乘：站在过道里，送餐时走到那一列 */
+.crew {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 2;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.crew > div {
+  position: absolute;
+}
+.crew-hat {
+  left: -8px;
+  top: -23px;
+  width: 16px;
+  height: 6px;
+  border-radius: 6px 6px 2px 2px;
+  background: #243a73;
+  box-shadow: inset 0 -2px 0 #ffcf3f;
+}
+.crew-head {
+  left: -7px;
+  top: -18px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 70%, #ffd9bd, #f2b48c);
+  box-shadow: inset 0 3px 0 #4a2c1d;
+}
+.crew-body {
+  left: -10px;
+  top: -5px;
+  width: 20px;
+  height: 17px;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, #2f4c93, #1d2f63);
+}
+.crew-body::before {
+  /* 红色丝巾 */
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  border: 4px solid transparent;
+  border-top: 5px solid #e2434b;
+}
+.crew-tray {
+  left: 7px;
+  top: -3px;
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #f4f6fb, #b9c2d6);
+  box-shadow: 0 1px 2px rgba(20, 30, 70, 0.3);
+}
+.crew.face-left .crew-tray {
+  left: -21px;
+}
+.crew.walk .crew-head,
+.crew.walk .crew-hat,
+.crew.walk .crew-body {
+  animation: crew-bob 0.14s ease-in-out 2;
+}
+.crew.serve .crew-tray {
+  animation: crew-serve 0.45s ease-out;
+}
+@keyframes crew-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes crew-serve {
+  40% {
+    transform: translateY(-9px);
+  }
+}
+
+/* 乘客收到餐点：嚼一嚼 */
+.pax .face {
+  display: inline-block;
+}
+.pax.eat .face {
+  animation: munch 0.22s ease-in-out 3;
+}
+@keyframes munch {
+  50% {
+    transform: scale(1.08, 0.9) translateY(2px);
+  }
+}
+
+/* 结算：金币滚动、新纪录 */
+.result-coins {
+  font-variant-numeric: tabular-nums;
+}
+.new-record {
+  display: inline-block;
+  margin: 2px 0 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffcf3f, #ff9f1c);
+  color: #5a3200;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(255, 159, 28, 0.45);
+  animation: record-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+@keyframes record-pop {
+  from {
+    transform: scale(0.2) rotate(-8deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pano-layer.clouds,
+  .crew.walk > div,
+  .crew.serve .crew-tray,
+  .pax.eat .face,
+  .new-record {
+    animation: none;
+  }
+  .crew,
+  .pano-layer.city {
+    transition: none;
+  }
+}
