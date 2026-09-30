@@ -244,7 +244,7 @@
       if (!s) return;
       if (s.waitFor && !hint.classList.contains('show') && !s.waitFor(f)) return;
       if (!hint.classList.contains('show')) {
-        hint.textContent = s.text;
+        SC.UI.setText(hint, s.text);
         hint.classList.add('show');
         hint.classList.toggle('hold', !!s.hold);
         f.hold = !!s.hold;
@@ -278,6 +278,8 @@
         bubble.appendChild(el);
         return el;
       });
+      const alt = h('span.bubble-alt');
+      bubble.appendChild(alt);
       const pfill = h('div.pfill');
       const mood = h('span.mood');
       const pax = h(
@@ -286,7 +288,7 @@
         h('div.avatar', h('span.face', p.face), type.badge ? h('span.badge', { title: type.name + '：' + (type.desc || '') }, type.badge) : null, mood),
         h('div.pbar', pfill)
       );
-      return { el: pax, bubble, items, pfill, mood, state: '', crying: null, doneMask: '' };
+      return { el: pax, bubble, alt, items, pfill, mood, state: '', crying: null, doneMask: '' };
     }
 
     function renderSeats() {
@@ -314,11 +316,11 @@
           px.el.classList.remove('st-' + px.state);
           px.el.classList.add('st-' + p.state);
           px.state = p.state;
-          if (p.state === 'sleep') px.bubble.dataset.alt = '💤';
-          else if (p.state === 'think' || p.state === 'board') px.bubble.dataset.alt = '…';
-          else if (p.state === 'happy') px.bubble.dataset.alt = p.mood > 0.6 ? '😍' : '🙂';
-          else if (p.state === 'angry') px.bubble.dataset.alt = '😡💢';
+          // 气泡里的状态图标（睡觉 / 思考 / 满意 / 生气）盖住点单内容
+          const alt = p.state === 'sleep' ? '💤' : p.state === 'think' || p.state === 'board' ? '…' : p.state === 'happy' ? (p.mood > 0.6 ? '😍' : '🙂') : p.state === 'angry' ? '😡💢' : '';
+          if (alt) px.bubble.dataset.alt = alt;
           else delete px.bubble.dataset.alt;
+          SC.UI.setText(px.alt, alt);
         }
         const mask = p.order.map((o) => (o.done ? 1 : 0)).join('');
         if (mask !== px.doneMask) {
@@ -329,7 +331,7 @@
         px.pfill.style.width = frac * 100 + '%';
         px.pfill.style.background = frac > 0.6 ? 'var(--ok)' : frac > 0.3 ? 'var(--warn)' : 'var(--bad)';
         const mood = p.state === 'wait' ? (p.crying ? '😭' : moodOf(frac)) : '';
-        if (px.mood.textContent !== mood) px.mood.textContent = mood;
+        SC.UI.setText(px.mood, mood);
         const urgent = p.state === 'wait' && frac < 0.25;
         px.el.classList.toggle('urgent', urgent);
         if (px.crying !== p.crying) {
@@ -412,7 +414,7 @@
       const state = pr.done ? 'done' : pr.failed ? 'failed' : '';
       const count = n != null ? ` ${Math.min(pr.cur, n)}/${n}` : '';
       const txt = `🏅 ${ch.emoji} ${ch.name}${count}${state === 'done' ? ' ✓' : state === 'failed' ? ' ✗' : ''}`;
-      if (chEl.textContent !== txt) chEl.textContent = txt;
+      SC.UI.setText(chEl, txt);
       if (state !== chState) {
         chEl.className = 'hud-challenge' + (state ? ' ' + state : '');
         // 数量类挑战在航班中途达成时庆祝一下；“零失误”类到航班结束才算完成
@@ -439,7 +441,8 @@
         }
       }
       if (f.combo !== lastCombo) {
-        comboEl.innerHTML = f.combo >= 2 ? `🔗<b>${f.combo}</b><small>连击</small>` : '';
+        comboEl.textContent = '';
+        if (f.combo >= 2) comboEl.append(h('span.combo-ico', '🔗'), h('b', f.combo), h('small', '连击'));
         comboEl.classList.toggle('hot', f.combo >= 5);
         lastCombo = f.combo;
       }
@@ -449,7 +452,7 @@
         const left = cfg.repLimit - f.repLoss;
         const shield = f.shield > 0 ? ` 🛡️${f.shield}` : '';
         const txt = '❤️'.repeat(Math.max(0, left)) + shield;
-        if (repEl.textContent !== txt) repEl.textContent = txt;
+        SC.UI.setText(repEl, txt);
       }
       // 狂热
       if (f.feverActive) {
@@ -466,7 +469,7 @@
     }
 
     function showBanner(text, cls, dur) {
-      banner.textContent = text;
+      SC.UI.setText(banner, text);
       banner.className = 'banner show ' + (cls || '');
       clearTimeout(bannerTimer);
       bannerTimer = setTimeout(() => banner.classList.remove('show'), dur || 2200);

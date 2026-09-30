@@ -1456,12 +1456,15 @@ button:disabled {
   border-top-color: #fff;
   border-bottom: 0;
 }
-.bubble[data-alt] > * {
+.bubble[data-alt] > *:not(.bubble-alt) {
   display: none;
 }
-.bubble[data-alt]::before {
-  content: attr(data-alt);
+.bubble-alt {
+  display: none;
   font-size: 18px;
+}
+.bubble[data-alt] > .bubble-alt {
+  display: inline;
 }
 .oi {
   font-size: 21px;
@@ -1884,15 +1887,16 @@ button:disabled {
   filter: grayscale(1) brightness(0.5);
 }
 .station.burnt::after {
-  content: '💨 点击清理';
+  content: '点击清理';
   position: absolute;
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
-  background: rgba(0, 0, 0, 0.65);
+  /* 前面的 💨 用 3D 图标，叠在半透明黑底上 */
+  background: url('../assets/emoji/1f4a8.webp') 5px center / 14px no-repeat, rgba(0, 0, 0, 0.65);
   border-radius: 999px;
-  padding: 1px 6px;
+  padding: 1px 6px 1px 22px;
   font-size: 11px;
   font-weight: 800;
 }
@@ -2042,12 +2046,14 @@ button:disabled {
   transition: opacity 0.3s, transform 0.3s;
 }
 .tutorial-hint::before {
-  content: '🧑‍✈️';
+  content: '';
   position: absolute;
-  left: 10px;
+  left: 8px;
   top: 50%;
+  width: 30px;
+  height: 30px;
   transform: translateY(-50%);
-  font-size: 24px;
+  background: url('../assets/emoji/1f9d1-200d-2708.webp') center / contain no-repeat;
 }
 .tutorial-hint.show {
   opacity: 1;
@@ -2993,4 +2999,17 @@ button:disabled {
   .pano-layer.city {
     transition: none;
   }
+}
+
+/* ---------- 3D 图标（Fluent Emoji 3D）：跟随所在位置的字号缩放，替代系统 emoji ---------- */
+img.emo {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0 0.02em;
+  vertical-align: -0.28em;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }

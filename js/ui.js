@@ -2,6 +2,68 @@
 (function (root) {
   const SC = (root.SC = root.SC || {});
 
+  // ---------- 3D 图标：emoji 有对应图片（assets/emoji）就换成图片，没有就保留系统 emoji ----------
+  // 一个完整 emoji：国旗，或“图形 + 可选变体选择符/肤色 + 零宽连接的组合”
+  const EMO_RE = /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*/gu;
+  // 文件名：去掉 FE0F 后的码点（与 tools/build_emoji.py 保持一致）
+  function emojiKey(e) {
+    return Array.from(e)
+      .filter((c) => c !== '\uFE0F')
+      .map((c) => c.codePointAt(0).toString(16))
+      .join('-');
+  }
+  function hasIcon(e) {
+    return !!(SC.EMOJI_ASSETS && SC.EMOJI_ASSETS.has(emojiKey(e)));
+  }
+  function iconSrc(e) {
+    return 'assets/emoji/' + emojiKey(e) + '.webp';
+  }
+  function emoImg(e) {
+    const img = document.createElement('img');
+    img.className = 'emo';
+    img.src = iconSrc(e);
+    img.alt = e;
+    img.draggable = false;
+    return img;
+  }
+  // 字符串 → 文本节点或“文本 + 图片”片段
+  function emoText(str) {
+    str = String(str);
+    EMO_RE.lastIndex = 0;
+    if (!SC.EMOJI_ASSETS || !EMO_RE.test(str)) return document.createTextNode(str);
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    EMO_RE.lastIndex = 0;
+    for (const m of str.matchAll(EMO_RE)) {
+      if (!hasIcon(m[0])) continue;
+      if (m.index > last) frag.appendChild(document.createTextNode(str.slice(last, m.index)));
+      frag.appendChild(emoImg(m[0]));
+      last = m.index + m[0].length;
+    }
+    if (last < str.length) frag.appendChild(document.createTextNode(str.slice(last)));
+    return frag;
+  }
+  // 设置带 emoji 的文本；内容没变时不动 DOM（航班中每帧都会调用）
+  function setText(el, str) {
+    str = str == null ? '' : String(str);
+    if (el._emoText === str) return;
+    el._emoText = str;
+    el.textContent = '';
+    el.appendChild(emoText(str));
+  }
+  // 把一段已有 DOM 里的 emoji 文本都换成图标（用于 innerHTML 生成的内容）
+  function emojify(root) {
+    if (!SC.EMOJI_ASSETS || !root) return root;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    for (const n of nodes) {
+      const frag = emoText(n.nodeValue);
+      if (frag.nodeType !== 3) n.replaceWith(frag);
+    }
+    return root;
+  }
+
   // h('div.cls#id', {attrs}, children...)
   function h(sel, attrs, ...children) {
     const m = sel.match(/^([a-z0-9]+)?((?:[.#][\w-]+)*)$/i);
@@ -24,7 +86,7 @@
         if (k.startsWith('on') && typeof v === 'function') {
           el.addEventListener(k.slice(2).toLowerCase(), v);
         } else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
-        else if (k === 'html') el.innerHTML = v;
+        else if (k === 'html') emojify((el.innerHTML = v, el));
         else if (k === 'text') el.textContent = v;
         else el.setAttribute(k, v === true ? '' : v);
       }
@@ -37,12 +99,25 @@
       if (c == null || c === false) continue;
       if (Array.isArray(c)) append(el, c);
       else if (c instanceof Node) el.appendChild(c);
-      else el.appendChild(document.createTextNode(String(c)));
+      else el.appendChild(emoText(c));
     }
   }
 
   const UI = {
     h,
+    setText,
+    emojify,
+    hasIcon,
+    iconSrc,
+    // 启动后空闲时预加载全部图标，避免航班中第一次出现某道菜时闪一下
+    preloadIcons() {
+      if (!SC.EMOJI_ASSETS) return;
+      for (const key of SC.EMOJI_ASSETS) {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = 'assets/emoji/' + key + '.webp';
+      }
+    },
     app: null,
     modalRoot: null,
     toastRoot: null,
@@ -149,9 +224,9 @@
       const show = () => {
         const [who, line] = lines[i];
         const cast = SC.CAST[who] || { name: who, face: '🙂' };
-        face.textContent = cast.face;
+        setText(face, cast.face);
         name.textContent = cast.name;
-        text.textContent = line;
+        setText(text, line);
         box.classList.toggle('right', who !== 'captain' && who !== 'purser');
         hintEl.textContent = i < lines.length - 1 ? '点击继续 ▸' : '开始 ▸';
         box.classList.remove('pop');
@@ -172,6 +247,8 @@
     // 手机震动反馈（设置里可关）；浏览器不支持或还没交互过时静默忽略
     buzz(pattern) {
       if (!SC.Save.data.settings.vibrate || typeof navigator === 'undefined' || !navigator.vibrate) return;
+      // 页面还没被点过时浏览器会拦截并报错，直接跳过
+      if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
       try {
         navigator.vibrate(pattern);
       } catch (e) {
@@ -188,7 +265,7 @@
         if (!el.isConnected && now - t0 > 50) return;
         const k = Math.min(1, (now - t0) / dur);
         const v = Math.round(to * (1 - Math.pow(1 - k, 3)));
-        el.textContent = fmt(v);
+        setText(el, fmt(v));
         if (k < 1) {
           if (now - lastTick > 90) {
             SC.Audio.play('coin');
@@ -197,7 +274,7 @@
           requestAnimationFrame(step);
         }
       };
-      el.textContent = fmt(0);
+      setText(el, fmt(0));
       requestAnimationFrame(step);
     },
 
