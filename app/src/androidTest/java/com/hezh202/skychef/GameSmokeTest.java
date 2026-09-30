@@ -112,6 +112,8 @@ public class GameSmokeTest {
             js(scenario, "document.querySelector('.menu-btn.primary').click()");
             waitFor(scenario, "!!document.querySelector('.level-node')");
             js(scenario, "document.querySelector('.level-node').click()");
+            // 首次进入城市会先播放剧情对话，逐句点掉
+            js(scenario, "(function(){var n=0;while(document.querySelector('.dlg-overlay')&&n++<20)document.querySelector('.dlg-overlay').click();return n;})()");
             waitFor(scenario, "!!document.querySelector('.modal-buttons .primary')");
             js(scenario, "document.querySelector('.modal-buttons .primary').click()");
             waitFor(scenario, "!!document.querySelector('.game') && !!SC._view");

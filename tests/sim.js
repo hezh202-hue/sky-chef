@@ -140,6 +140,39 @@ function unitTests() {
   assert.ok(wave.some((p, i) => i > 0 && p.t - wave[i - 1].t < 1.3), '后期关卡有扎堆登机');
   for (let i = 1; i < wave.length; i++) assert.ok(wave[i].t >= wave[i - 1].t, '登机时间递增');
 
+  // 城市 Boss：每城第 6 班都有 Boss，Boss 生气离开则航班失败、不计星
+  for (let c = 0; c < SC.CITIES.length; c++) {
+    const bc = SC.campaignFlight(c, SC.LEVELS_PER_CITY - 1, {});
+    assert.ok(bc.cityBoss, 'Boss 关有 Boss 定义');
+    assert.strictEqual(bc.passengers.filter((p) => SC.PTYPES[p.type].boss).length, 1, '恰好一位 Boss 乘客');
+    for (const k of ['start', 'boss', 'clear']) assert.ok(SC.STORY[`city-${c}-${k}`], `剧情 city-${c}-${k} 存在`);
+    for (const [who] of Object.values(SC.STORY).flat()) assert.ok(SC.CAST[who], '剧情角色已定义：' + who);
+  }
+  const bf = new SC.Flight({ menu: ['cola'], passengers: [{ t: 0, type: 'mayor', order: ['cola'] }], patience: 3, targets: [1, 2, 3], seed: 11 });
+  for (let i = 0; i < 400 && !bf.done; i++) bf.tick(0.05);
+  assert.ok(bf.failed && bf.bossFailed, 'Boss 生气离开航班失败');
+  assert.strictEqual(bf.stars, 0);
+  const bh = new SC.Flight({ menu: ['cola'], passengers: [{ t: 0, type: 'idol', order: ['cola'] }], seed: 12 });
+  for (let i = 0; i < 40; i++) bh.tick(0.05);
+  bh.tapStation(0);
+  assert.ok(bh.bossServed && bh.bossMood > 0.9);
+  assert.ok(SC.CHALLENGES.vip_happy.progress(bh).done, 'Boss 满意挑战完成');
+
+  // 关卡挑战：每关都有，类型合法；数量类有目标值
+  for (let c = 0; c < SC.CITIES.length; c++) {
+    for (let l = 0; l < SC.LEVELS_PER_CITY; l++) {
+      const cc = SC.campaignFlight(c, l, {}).challenge;
+      assert.ok(SC.CHALLENGES[cc.type], '挑战类型存在：' + cc.type);
+      if (['combo', 'fresh', 'fast'].includes(cc.type)) assert.ok(cc.n >= 2, '数量类挑战有目标值');
+    }
+  }
+  const cf = new SC.Flight({ menu: ['burger'], passengers: [{ t: 0, type: 'normal', order: ['burger'] }], seed: 13 });
+  cf.tapStation(cf.stations.findIndex((s) => s.id === 'bun'));
+  cf.discardPlate(0);
+  assert.strictEqual(cf.discards, 1);
+  assert.ok(SC.CHALLENGES.no_trash.progress(cf).failed, '倒盘子后零浪费挑战失败');
+  assert.ok(SC.CHALLENGES.no_angry.progress(cf).failed === false);
+
   console.log('✔ 单元测试全部通过');
 }
 

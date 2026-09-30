@@ -61,12 +61,16 @@
     const paxLeftEl = h('span', '0');
     const planeEl = h('div.route-plane', '✈️');
     const repEl = h('div.hud-rep');
+    // 关卡挑战进度
+    const ch = cfg.challenge && SC.CHALLENGES[cfg.challenge.type];
+    const chEl = ch ? h('div.hud-challenge', { title: ch.desc(cfg.challenge.n) }) : null;
+    let chState = '';
     const pauseBtn = h('button.hud-btn', { title: '暂停 (Esc)', onclick: () => pause() }, '⏸');
     const bookBtn = h('button.hud-btn', { title: '菜谱', onclick: () => showBook() }, '📖');
     const hud = h(
       'div.hud',
       pauseBtn,
-      h('div.hud-mid', h('div.hud-title', cfg.title), h('div.route', h('span.route-from', from), h('div.route-line', planeEl), h('span.route-to', to), h('span.route-pax', '👥 ', paxLeftEl))),
+      h('div.hud-mid', h('div.hud-title', cfg.title), h('div.route', h('span.route-from', from), h('div.route-line', planeEl), h('span.route-to', to), h('span.route-pax', '👥 ', paxLeftEl)), chEl),
       h('div.hud-score', h('div.hud-coins', '💰 ', coinsEl), starBar),
       comboEl,
       repEl,
@@ -254,7 +258,7 @@
       const pfill = h('div.pfill');
       const mood = h('span.mood');
       const pax = h(
-        'div.pax.type-' + p.type,
+        'div.pax.type-' + p.type + (type.boss ? '.boss' : ''),
         bubble,
         h('div.avatar', h('span.face', p.face), type.badge ? h('span.badge', { title: type.name + '：' + (type.desc || '') }, type.badge) : null, mood),
         h('div.pbar', pfill)
@@ -378,7 +382,28 @@
       });
     }
 
+    function renderChallenge() {
+      if (!chEl) return;
+      const n = cfg.challenge.n;
+      const pr = ch.progress(f, n);
+      const state = pr.done ? 'done' : pr.failed ? 'failed' : '';
+      const count = n != null ? ` ${Math.min(pr.cur, n)}/${n}` : '';
+      const txt = `🏅 ${ch.emoji} ${ch.name}${count}${state === 'done' ? ' ✓' : state === 'failed' ? ' ✗' : ''}`;
+      if (chEl.textContent !== txt) chEl.textContent = txt;
+      if (state !== chState) {
+        chEl.className = 'hud-challenge' + (state ? ' ' + state : '');
+        // 数量类挑战在航班中途达成时庆祝一下；“零失误”类到航班结束才算完成
+        if (state === 'done' && !f.done) {
+          showBanner(`🏅 挑战完成：${ch.name}！`, 'ok', 1800);
+          SC.Audio.play('star');
+        }
+        if (state === 'failed') SC.Audio.play('reject');
+        chState = state;
+      }
+    }
+
     function renderHud() {
+      renderChallenge();
       if (f.coins !== lastCoins) {
         coinsEl.textContent = f.coins;
         coinsEl.parentNode.classList.remove('bump');
@@ -523,9 +548,16 @@
           case 'trash':
             SC.Audio.play('trash');
             break;
-          case 'board':
+          case 'board': {
             SC.Audio.play('board');
+            const bp = f.seats[e.seat];
+            if (bp && SC.PTYPES[bp.type].boss) {
+              const t = SC.PTYPES[bp.type];
+              showBanner(`${t.badge} ${t.name}登机了！优先照顾`, 'fever', 2600);
+              SC.Audio.play('fever');
+            }
             break;
+          }
           case 'order':
             SC.Audio.play('order');
             break;

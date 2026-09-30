@@ -6,10 +6,24 @@
 // 用法：node tests/calibrate.js   （改动关卡生成或引擎数值后重新运行）
 const fs = require('fs');
 const path = require('path');
-const { SC, SKILLS, avgCoins } = require('./bot');
+const { SC, SKILLS, avgCoins, playFlight } = require('./bot');
 
 // 校准时忽略旧目标，避免循环依赖
 SC.CAMPAIGN_TARGETS = null;
+SC.CAMPAIGN_CHALLENGES = null;
+
+// 数量类挑战：取普通玩家（不升级）6 局平均值的 80%——要认真打才能完成，但不需要升级
+const CH_STAT = { combo: 'maxCombo', fresh: 'freshDishes', fast: 'fastServed' };
+function challengeTarget(c, l) {
+  const type = SC.CITY_CHALLENGES[c][l];
+  const stat = CH_STAT[type];
+  if (!stat) return null;
+  const [, delay, sloppy, lag] = SKILLS[1];
+  let sum = 0;
+  for (let i = 0; i < 6; i++) sum += playFlight(SC.campaignFlight(c, l, {}), delay, sloppy, lag, i)[stat];
+  return Math.max(2, Math.round((sum / 6) * 0.8));
+}
+const challenges = {};
 
 const round5 = (x) => Math.max(5, Math.round(x / 5) * 5);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -29,18 +43,26 @@ for (let c = 0; c < SC.CITIES.length; c++) {
     two = Math.max(two, one * 1.15);
     three = Math.max(three, two * 1.12);
     out[`${c}-${l}`] = [round5(one), round5(two), round5(three)];
-    rows.push(`${SC.CITIES[c].name}-${l + 1}`.padEnd(8) + `高手${E} 普通${N} 新手${V}`.padEnd(26) + `→ ${out[`${c}-${l}`].join(' / ')}`);
+    const ch = challengeTarget(c, l);
+    if (ch != null) challenges[`${c}-${l}`] = ch;
+    rows.push(`${SC.CITIES[c].name}-${l + 1}`.padEnd(8) + `高手${E} 普通${N} 新手${V}`.padEnd(26) + `→ ${out[`${c}-${l}`].join(' / ')}`.padEnd(22) + `挑战 ${SC.CITY_CHALLENGES[c][l]}${ch != null ? ' ' + ch : ''}`);
   }
 }
 
 const body = Object.entries(out)
   .map(([k, v]) => `    '${k}': [${v.join(', ')}],`)
   .join('\n');
-const file = `// 生涯关卡星级目标（金币）。由 tests/calibrate.js 根据机器人实测自动生成，请勿手改。
+const chBody = Object.entries(challenges)
+  .map(([k, v]) => `    '${k}': ${v},`)
+  .join('\n');
+const file = `// 生涯关卡星级目标（金币）与挑战目标值。由 tests/calibrate.js 根据机器人实测自动生成，请勿手改。
 (function (root) {
   const SC = (root.SC = root.SC || {});
   SC.CAMPAIGN_TARGETS = {
 ${body}
+  };
+  SC.CAMPAIGN_CHALLENGES = {
+${chBody}
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 `;

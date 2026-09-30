@@ -91,6 +91,10 @@
           h('li', h('b', '🔥 狂热'), '：服务积累狂热值，满了点击按钮——收入翻倍、耐心冻结、烹饪加速。'),
           h('li', h('b', '⛈️ 气流颠簸'), '：安全带灯亮起时不能送餐，但可以继续备餐。提前规划！'),
           h('li', h('b', '🧑‍🤝‍🧑 乘客性格'), '：商务客没耐心但小费多；小朋友会哭闹影响邻座；老奶奶送糖；网红好评让全舱回血；评论家决定奖金。'),
+          h('li', h('b', '🔧 设备升级'), '：每台设备单独升级；卡关时回去升级，再来挑战三星。'),
+          h('li', h('b', '🏅 关卡挑战'), '：每关一个额外目标，航班顶部显示进度，首次完成奖励 💎 星钻。'),
+          h('li', h('b', '👑 Boss 航班'), '：每座城市第 6 班有特别乘客登机，他生气离开本班就失败。'),
+          h('li', h('b', '💎 关前道具'), '：起飞前可花星钻买开局狂热、耐心加成或额外盘子。'),
           h('li', h('b', '🌍 环球冒险'), '：像《杀戮尖塔》一样选择航线，每班航班后三选一天赋，免税店、随机事件、最终挑战总统专机。'),
           h('li', h('b', '📅 每日航班'), '：每天一套固定种子与随机规则，挑战自己的最高分。')
         ),
@@ -170,14 +174,17 @@
       const open = Save.levelUnlocked(c, l);
       const st = Save.starsOf(c, l);
       const newItems = city.unlocks[l].map((id) => SC.RECIPES[id].emoji).join('');
-      const n = h('button.level-node' + (open ? '' : '.locked') + (st ? '.cleared' : ''), {
+      const isBoss = l === SC.LEVELS_PER_CITY - 1;
+      const medal = !!Save.data.medals[Save.key(c, l)];
+      const n = h('button.level-node' + (open ? '' : '.locked') + (st ? '.cleared' : '') + (isBoss ? '.boss-node' : ''), {
         disabled: !open,
         style: { '--city': city.color },
         onclick: () => { SC.Audio.play('click'); S.startCampaign(c, l); },
       },
       h('div.ln-num', open ? l + 1 : '🔒'),
       h('div.ln-stars', { html: UI.starsHtml(st) }),
-      h('div.ln-new', newItems ? '新 ' + newItems : '终极挑战'),
+      open ? h('span.ln-medal' + (medal ? '' : '.off'), { title: medal ? '关卡挑战已完成' : '关卡挑战未完成' }, '🏅') : null,
+      h('div.ln-new', isBoss ? `${SC.PTYPES[SC.CITY_BOSS[c].vip].badge} ${SC.CITY_BOSS[c].title}` : newItems ? '新 ' + newItems : ''),
       Save.data.best[Save.key(c, l)] ? h('small.ln-best', '最佳 ' + Save.data.best[Save.key(c, l)]) : null);
       path.appendChild(n);
     }
@@ -314,6 +321,7 @@
 
   function adviceFor(f, cfg) {
     const tips = [];
+    if (f.bossFailed && cfg && cfg.cityBoss) tips.push(['👑', `${SC.PTYPES[cfg.cityBoss.vip].name}生气离开，本班不计星。他一登机就优先给他上菜，组合菜可以提前备好。`]);
     const up = affordableUpgrade(cfg);
     if (up) {
       const def = SC.STATIONS[up.sid];
@@ -334,12 +342,37 @@
     return h('div.advice', h('div.advice-title', '💡 机长的建议'), tips.map(([e, t]) => h('div.advice-item', h('span', e), h('span', t))));
   }
 
+  // 生涯关卡的开场附加信息：Boss 规则 + 关卡挑战
+  function campaignExtra(cfg) {
+    const box = h('div');
+    if (cfg.cityBoss) {
+      const t = SC.PTYPES[cfg.cityBoss.vip];
+      box.appendChild(h('div.boss-intro', `${t.badge} Boss 航班：${cfg.cityBoss.desc}`));
+    }
+    if (cfg.challenge) {
+      const ch = SC.CHALLENGES[cfg.challenge.type];
+      const done = !!Save.data.medals[Save.key(cfg.city, cfg.level)];
+      box.appendChild(h('div.intro-challenge' + (done ? '.done' : ''), `🏅 关卡挑战：${ch.emoji} ${ch.name}——${ch.desc(cfg.challenge.n)}`, done ? '（已完成）' : `（首次完成 +${SC.CHALLENGE_GEMS}💎）`));
+    }
+    return box;
+  }
+
+  // 剧情：没看过就先播放，再继续
+  function story(key, next) {
+    if (!SC.STORY[key] || Save.data.seen['story-' + key]) return next();
+    Save.data.seen['story-' + key] = 1;
+    Save.save();
+    UI.dialog(SC.STORY[key], next);
+  }
+
   S.startCampaign = function (c, l) {
+    const key = l === 0 ? `city-${c}-start` : l === SC.LEVELS_PER_CITY - 1 ? `city-${c}-boss` : null;
+    if (key && !Save.data.seen['story-' + key]) return story(key, () => S.startCampaign(c, l));
     const make = (boosters) => SC.campaignFlight(c, l, Save.data.upgrades, Save.data.stationLv, boosters);
     const cfg = make([]);
     flightIntro(
       cfg,
-      null,
+      campaignExtra(cfg),
       (boosters, cost) => {
         let run = cfg;
         if (boosters.length) {
@@ -375,6 +408,27 @@
     if (all3) UI.achieve('city_master');
     if (SC.CITIES.every((_, i) => Save.starsOf(i, SC.LEVELS_PER_CITY - 1) > 0)) UI.achieve('all_cities');
 
+    const bossName = cfg.cityBoss ? SC.PTYPES[cfg.cityBoss.vip].name : '';
+    // 关卡挑战：首次完成发奖章和星钻
+    let chLine = null;
+    if (cfg.challenge) {
+      const ch = SC.CHALLENGES[cfg.challenge.type];
+      const pr = ch.progress(f, cfg.challenge.n);
+      const had = !!Save.data.medals[key];
+      if (pr.done && !had) {
+        Save.data.medals[key] = Date.now();
+        Save.data.gems += SC.CHALLENGE_GEMS;
+        Save.save();
+        UI.achieve('medal1');
+        if (Object.keys(Save.data.medals).length >= 12) UI.achieve('medal12');
+        if (SC.CITIES.every((_, i) => Save.data.medals[Save.key(i, SC.LEVELS_PER_CITY - 1)])) UI.achieve('boss4');
+      }
+      const count = cfg.challenge.n != null ? `（${Math.min(pr.cur, cfg.challenge.n)}/${cfg.challenge.n}）` : '';
+      chLine = pr.done
+        ? h('div.challenge-result.done', `🏅 挑战完成：${ch.emoji} ${ch.name}`, had ? '' : ` +${SC.CHALLENGE_GEMS} 💎`)
+        : h('div.challenge-result.miss', `🏅 挑战未完成：${ch.emoji} ${ch.desc(cfg.challenge.n)}${count}`);
+    }
+
     const pass = stars > 0;
     const hasNext = l + 1 < SC.LEVELS_PER_CITY || c + 1 < SC.CITIES.length;
     const next = l + 1 < SC.LEVELS_PER_CITY ? [c, l + 1] : [c + 1, 0];
@@ -389,10 +443,10 @@
     let unlockNote = null;
     if (pass && l === 2 && c === 0 && prev === 0) unlockNote = h('div.unlock-note', '🎉 解锁新模式：🌍 环球冒险 与 📅 每日航班！');
     if (pass && l === SC.LEVELS_PER_CITY - 1 && prev === 0 && c + 1 < SC.CITIES.length) unlockNote = h('div.unlock-note', `🎉 解锁新城市：${SC.CITIES[c + 1].flag} ${SC.CITIES[c + 1].name}！`);
-    UI.modal({
-      title: pass ? '🛬 航班顺利抵达！' : '😣 乘客们不太满意……',
+    const showResult = () => UI.modal({
+      title: pass ? '🛬 航班顺利抵达！' : f.bossFailed ? `😣 ${bossName}生气离开了……` : '😣 乘客们不太满意……',
       cls: 'result',
-      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), gemGain ? h('div.gem-gain', `新拿到 ${gemGain} 颗星：+${gemGain} 💎`) : null, statsBlock(f), stars < 3 ? adviceBlock(f, cfg) : null, unlockNote),
+      body: h('div', starEl, h('div.result-coins', `💰 ${f.coins}`), h('div.result-goal', pass ? (stars < 3 ? `下一颗星：${cfg.targets[stars]} 💰（还差 ${cfg.targets[stars] - f.coins}）` : '完美航班！') : f.bossFailed ? `${bossName}离开了，本班不计星——下次先照顾好他` : `过关需要 ${cfg.targets[0]} 💰，还差 ${cfg.targets[0] - f.coins}`), gemGain ? h('div.gem-gain', `新拿到 ${gemGain} 颗星：+${gemGain} 💎`) : null, chLine, statsBlock(f), stars < 3 ? adviceBlock(f, cfg) : null, unlockNote),
       buttons: [
         { label: '地图', onClick: () => S.campaign(c) },
         { label: '重试', onClick: () => S.startCampaign(c, l) },
@@ -400,6 +454,9 @@
         pass && hasNext ? { label: '下一班 →', cls: 'primary', onClick: () => { S.campaign(next[0]); S.startCampaign(next[0], next[1]); } } : null,
       ].filter(Boolean),
     });
+    // 第一次打赢城市 Boss：先播放通关剧情
+    if (pass && cfg.cityBoss && prev === 0) story(`city-${c}-clear`, showResult);
+    else showResult();
   };
 
   // ======================= 升级 =======================

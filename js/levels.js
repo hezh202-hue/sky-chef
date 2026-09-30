@@ -139,7 +139,9 @@
     const city = SC.CITIES[c];
     const seed = 1000 + c * 100 + l;
     const rng = SC.rng(seed);
+    const cityBoss = l === SC.LEVELS_PER_CITY - 1 ? SC.CITY_BOSS[c] : null;
     const menu = SC.menuFor(c, l);
+    if (cityBoss && cityBoss.rule === 'redeye' && !menu.includes('blanket')) menu.push('blanket');
     const featured = city.unlocks[l].length ? city.unlocks[l] : [];
     const count = 6 + l * 2 + c * 2;
     const gap = Math.max(2.4, 5.0 - l * 0.38 - c * 0.3 + (l >= 4 ? 0.4 : 0)) * (city.pace || 1);
@@ -156,9 +158,23 @@
       gap,
       load: SC.campaignLoad(c, l),
       itemWeights,
-      types: typeWeights(c, l),
+      types: typeWeights(c, l, cityBoss && { business: [['business', 10]], critics: [['critic', 6]] }[cityBoss.rule]),
       wave: waveSize(c, l),
+      sleepChance: cityBoss && cityBoss.rule === 'redeye' ? 0.45 : 0,
     });
+    if (cityBoss) {
+      // Boss 乘客在航班中段登场，点 3 道菜（优先组合菜）
+      const pool = menu.filter((id) => !SC.RECIPES[id].service);
+      const combos = rng.shuffle(pool.filter((id) => SC.RECIPES[id].parts.length > 1));
+      const order = combos.concat(rng.shuffle(pool.filter((id) => SC.RECIPES[id].parts.length === 1))).slice(0, 3);
+      const at = Math.floor(passengers.length * 0.4);
+      passengers.splice(at, 0, {
+        t: Math.round((passengers[at].t - 0.2) * 10) / 10,
+        type: cityBoss.vip,
+        order,
+        patienceMult: { mayor: 1.8, tycoon: 1.8, judge: 1.5, idol: 1.6 }[cityBoss.vip] || 1.5,
+      });
+    }
     if (c === 0 && l === 0) {
       // 教学关：手工编排，饮品交替出现、间隔宽松，保证第一次玩的人能顺利体验成功
       const script = [
@@ -179,12 +195,15 @@
     const mods = SC.modsFromUpgrades(upgrades, stationLv, boosters);
     const bv = baseValue(passengers);
     const tuned = SC.CAMPAIGN_TARGETS && SC.CAMPAIGN_TARGETS[c + '-' + l];
+    const chType = SC.CITY_CHALLENGES[c][l];
+    const chN = SC.CAMPAIGN_CHALLENGES && SC.CAMPAIGN_CHALLENGES[c + '-' + l];
+    const challenge = { type: chType, n: chN || { combo: 5, fresh: 3, fast: 4 }[chType] || null };
     return {
       mode: 'campaign',
       city: c,
       level: l,
       seed,
-      title: `${city.flag} ${city.route} · 第 ${l + 1} 班`,
+      title: cityBoss ? `${city.flag} 第 ${l + 1} 班 · ${cityBoss.title}` : `${city.flag} ${city.route} · 第 ${l + 1} 班`,
       theme: city.theme,
       menu,
       featured,
@@ -196,6 +215,8 @@
       targets: tuned ? tuned.slice() : SC.targetsFor(bv),
       baseValue: bv,
       tutorial: c === 0 && l === 0,
+      cityBoss,
+      challenge,
     };
   };
 

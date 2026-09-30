@@ -80,6 +80,9 @@
       this.autodrinkT = 0;
       this.bossServed = false;
       this.bossFailed = false;
+      this.bossMood = null; // Boss 满意离开时的耐心比例
+      this.fastServed = 0; // 耐心还很足（等待不到 20%）就吃上的乘客数
+      this.discards = 0; // 倒掉的盘子数
 
       this.turbs = (cfg.turbulence || []).map((x) => ({ t: x.t, dur: x.dur * this.mods.turbMult }));
       this.turbState = 'none'; // none | warn | active
@@ -128,7 +131,7 @@
     }
     get stars() {
       const t = this.cfg.targets;
-      if (!t) return 0;
+      if (!t || this.bossFailed) return 0; // Boss 生气离开：本班不计星
       let s = 0;
       for (let i = 0; i < 3; i++) if (this.coins >= t[i]) s = i + 1;
       return s;
@@ -365,6 +368,7 @@
     discardPlate(i) {
       if (this.done || !this.plates[i]) return false;
       this.plates[i] = null;
+      this.discards++;
       if (this.targetPlate === i) this.targetPlate = -1;
       this.emit('trash', { plate: i });
       return true;
@@ -398,10 +402,11 @@
       let price = 0;
       for (const o of p.order) price += this.recipePrice(o.id);
       let tipMult = this.mods.tipMult * type.tip;
-      if (p.type === 'business' || p.type === 'vip' || p.type === 'president') tipMult *= this.mods.vipTip;
+      if (p.type === 'business' || p.type === 'vip' || type.boss) tipMult *= this.mods.vipTip;
       // 小费看“实际等了多久”（不受送餐回血影响），越快越多，拉开手速差距
       const speed = SC.clamp(1 - (p.waitT || 0) / p.maxPatience, 0, 1);
       const tip = price * 0.6 * Math.pow(speed, 1.5) * tipMult;
+      if (speed >= 0.8) this.fastServed++;
       if (frac >= 0.5) {
         this.combo++;
         this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -441,7 +446,10 @@
         }
         note = '直播好评！全舱耐心 +15%';
       }
-      if (p.type === 'president') this.bossServed = true;
+      if (type.boss) {
+        this.bossServed = true;
+        this.bossMood = frac;
+      }
       this.emit('pay', {
         seat: p.seat,
         amount: total,
@@ -466,7 +474,7 @@
       } else {
         this.repLoss++;
       }
-      if (p.type === 'president') this.bossFailed = true;
+      if (SC.PTYPES[p.type].boss) this.bossFailed = true;
       this.emit('angry', { seat: p.seat, shielded, ptype: p.type });
       if (this.repLoss >= this.repLimit || this.bossFailed) {
         this.failed = true;

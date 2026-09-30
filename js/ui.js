@@ -137,6 +137,38 @@
       this.toast(`解锁护照印章：${a.name}`, a.emoji, 'gold');
     },
 
+    // 剧情对话：lines = [[角色id, 台词], ...]，点击推进，结束后回调 onDone
+    dialog(lines, onDone) {
+      let i = 0;
+      const face = h('div.dlg-face');
+      const name = h('div.dlg-name');
+      const text = h('div.dlg-text');
+      const hintEl = h('div.dlg-next', '点击继续 ▸');
+      const box = h('div.dlg-box', face, h('div.dlg-body', name, text), hintEl);
+      const overlay = h('div.dlg-overlay', box);
+      const show = () => {
+        const [who, line] = lines[i];
+        const cast = SC.CAST[who] || { name: who, face: '🙂' };
+        face.textContent = cast.face;
+        name.textContent = cast.name;
+        text.textContent = line;
+        box.classList.toggle('right', who !== 'captain' && who !== 'purser');
+        hintEl.textContent = i < lines.length - 1 ? '点击继续 ▸' : '开始 ▸';
+        box.classList.remove('pop');
+        void box.offsetWidth;
+        box.classList.add('pop');
+      };
+      overlay.addEventListener('click', () => {
+        SC.Audio.play('click');
+        i++;
+        if (i < lines.length) return show();
+        overlay.remove();
+        if (onDone) onDone();
+      });
+      this.modalRoot.appendChild(overlay);
+      show();
+    },
+
     // 在屏幕坐标处飘字
     floatText(x, y, text, cls) {
       const el = h('div.float-text' + (cls ? '.' + cls : ''), text);
