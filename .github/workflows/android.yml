@@ -49,9 +49,11 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release-unsigned.apk
+          # 文件名里的版本号取自 app/build.gradle，升级时只需改一处
+          VERSION=$(sed -n "s/.*versionName '\(.*\)'.*/\1/p" app/build.gradle)
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/sky-chef-1.0.0-unsigned.apk
-          sha256sum dist/sky-chef-1.0.0-unsigned.apk > dist/SHA256SUMS.txt
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/sky-chef-$VERSION-unsigned.apk"
+          (cd dist && sha256sum "sky-chef-$VERSION-unsigned.apk" > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:

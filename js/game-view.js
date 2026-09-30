@@ -199,8 +199,10 @@
       finger.classList.remove('show');
       f.hold = false;
     }
-    // 教学手指：只在每步开始和窗口尺寸变化时定位（不要每帧读布局，低端机上很耗电）
+    // 教学提示与手指：只在每步开始和窗口尺寸变化时定位（不要每帧读布局，低端机上很耗电）
     function tutFinger() {
+      // 提示框贴在顶栏下方：顶栏高度会随挑战徽章、窄屏换行变化，写死 top 会挡住金币和星级进度
+      if (hint.classList.contains('show')) hint.style.top = Math.round(hud.getBoundingClientRect().bottom + 8) + 'px';
       if (!tutHighlighted) return;
       const r = tutHighlighted.getBoundingClientRect();
       finger.style.left = r.left + r.width * 0.62 + 'px';
@@ -226,6 +228,7 @@
         hint.classList.add('show');
         hint.classList.toggle('hold', !!s.hold);
         f.hold = !!s.hold;
+        tutFinger();
         const t = tutTarget(s.target);
         if (t) {
           t.classList.add('highlight');
