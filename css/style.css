@@ -887,7 +887,7 @@ button:disabled {
 /* ---------- 升级 / 护照 ---------- */
 .upgrade-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 10px;
 }
 .upgrade-card {
@@ -933,7 +933,7 @@ button:disabled {
 }
 .stamp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 45%), 1fr));
   gap: 10px;
 }
 .stamp {
@@ -1110,7 +1110,7 @@ button:disabled {
 }
 .perk-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 10px;
 }
 .perk-card {
@@ -2477,4 +2477,153 @@ button:disabled {
 }
 @media (prefers-reduced-motion: reduce) {
   .station.ready.fresh { animation: none; }
+}
+
+/* ---------- 第二阶段：设备升级 / 星钻 / 关前道具 ---------- */
+.up-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+}
+.upgrade-card.locked {
+  opacity: 0.55;
+}
+.upgrade-card.maxed {
+  background: linear-gradient(135deg, #fffaf0, #fff1c9);
+  border: 1px solid #ffd76a;
+}
+.up-emoji {
+  position: relative;
+}
+.up-lv {
+  position: absolute;
+  right: -6px;
+  bottom: -2px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--gold);
+  color: #5a3d00;
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 16px;
+}
+.up-dishes {
+  margin-left: 6px;
+  font-size: 14px;
+  font-weight: 400;
+}
+.st-lv {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 10px;
+  letter-spacing: -1px;
+  color: #f0a500;
+  text-shadow: 0 1px 0 #fff;
+  pointer-events: none;
+}
+.station.lv-3 {
+  background: linear-gradient(180deg, #fffdf3, #fff0c2);
+  box-shadow: 0 4px 0 #d9a934, 0 4px 10px rgba(200, 140, 0, 0.25);
+}
+.gem-gain {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e6f0ff, #f1e6ff);
+  color: #5b3fd1;
+  font-weight: 800;
+}
+.boosters {
+  margin-top: 12px;
+}
+.boosters > .intro-sub {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.bo-wallet {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5b3fd1;
+}
+.booster-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.booster {
+  border: 2px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  transition: transform 0.1s, border-color 0.15s, background 0.15s;
+}
+.booster small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.bo-emoji {
+  font-size: 26px;
+}
+.bo-name {
+  font-weight: 800;
+  font-size: 13px;
+}
+.bo-cost {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5b3fd1;
+}
+.booster.on {
+  border-color: #7b5cff;
+  background: #f2edff;
+  transform: translateY(-2px);
+}
+.booster.on .bo-cost::before {
+  content: '✓ ';
+}
+.booster.poor {
+  opacity: 0.5;
+}
+
+/* 顶栏里的钱包更紧凑，窄屏下也能放下返回、标题和三种货币 */
+.topbar .wallet {
+  gap: 4px;
+  flex-shrink: 0;
+}
+.topbar .wallet span {
+  padding: 4px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.topbar .back {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (max-width: 420px) {
+  .topbar {
+    gap: 6px;
+  }
+  .topbar .back {
+    padding: 6px 10px;
+  }
+  .topbar .wallet span {
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+}
+.upgrade-card .btn {
+  flex-shrink: 0;
+}
+.up-info {
+  min-width: 0;
 }

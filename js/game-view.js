@@ -129,7 +129,8 @@
       const prod = h('div.st-prod', SC.ITEMS[def.out].emoji);
       const kindLabel = def.kind === 'cooker' ? '烹饪' : def.kind === 'base' ? '起盘' : '即取';
       const btn = h(
-        'button.station.kind-' + def.kind,
+        'button.station.kind-' + def.kind + (st.lv ? '.lv-' + st.lv : ''),
+        st.lv ? h('span.st-lv', { title: `${def.name} ${st.lv} 级` }, '★'.repeat(st.lv)) : null,
         emoji,
         prod,
         h('div.st-name', def.name),
@@ -328,7 +329,7 @@
             pct = 1;
             anyReady = true;
             if (s.readyT <= SC.FRESH_WINDOW) anyFresh = true;
-            if (st.def.burn && s.burnT > st.def.burn * f.mods.burnMult * 0.55) anyWarn = true;
+            if (s.burnT > f.burnLimit(st) * 0.55) anyWarn = true;
           } else if (s.state === 'burnt') {
             pct = 1;
             anyBurnt = true;
@@ -673,6 +674,10 @@
       pause,
       start() {
         SC.UI.setTheme(cfg.theme);
+        if (cfg.boosters && cfg.boosters.length) {
+          const icons = cfg.boosters.map((id) => SC.BOOSTERS.find((b) => b.id === id).emoji).join(' ');
+          setTimeout(() => showBanner('已使用道具 ' + icons, 'info', 1800), 300);
+        }
         document.addEventListener('keydown', onKey);
         document.addEventListener('visibilitychange', onVis);
         root.addEventListener('resize', tutFinger);
