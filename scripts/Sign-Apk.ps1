@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][string]$UnsignedApk,
     [Parameter(Mandatory)][string]$OutputApk,
     [Parameter(Mandatory)][string]$BuildTools,
