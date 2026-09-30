@@ -14,6 +14,8 @@
 
 纯 HTML + CSS + JavaScript，**零依赖、无需构建、离线可玩**。背景音乐为本地原创客舱主题曲，音效由 WebAudio 实时合成。
 
+**美术风格**：柔和光影的 3D 卡通，和标题插画同一路子。菜品、设备、乘客、界面图标统一使用微软 [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) 的 3D 版本（MIT 许可，许可证见 `assets/emoji/LICENSE-fluentui-emoji.txt`），不再依赖各家手机的系统 emoji，在任何设备上长得都一样。
+
 ## 🚀 怎么运行
 
 直接用浏览器打开 `index.html` 即可（电脑、手机都支持）。
@@ -85,6 +87,9 @@ sky-chef/
   js/audio.js        WebAudio 合成音效与背景音乐
   js/ui.js           UI 工具：元素构建、弹窗、飘字、飞行动画
   js/scenery.js      舷窗风景：城市天际线剪影、云层、随航程升降
+  js/emoji-assets.js 有 3D 图标的 emoji 清单（由 tools/build_emoji.py 生成）
+  assets/emoji/      3D 图标（Fluent Emoji 3D，128px WebP）
+  tools/             图标构建脚本与 emoji → Fluent 文件对照表
   js/game-view.js    航班画面渲染、输入、教程、快捷键
   js/screens.js      标题、地图、升级、护照、冒险、结算等界面
   js/main.js         启动

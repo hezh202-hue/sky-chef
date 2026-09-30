@@ -4,6 +4,7 @@
 
   function boot() {
     SC.UI.init();
+    setTimeout(() => SC.UI.preloadIcons(), 300);
     const d = SC.Save.load();
     SC.Audio.sfxOn = d.settings.sfx;
     SC.Audio.musicOn = d.settings.music;
